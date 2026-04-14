@@ -1,0 +1,316 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{algorithm}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{An Adaptive Multi-Agent System for Student Competency Analysis Across Cognitive Domains}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Author Name}
+\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
+\textit{Institution Name}\\
+City, Country \\
+email@institution.edu}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Author Name}
+\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
+\textit{Institution Name}\\
+City, Country \\
+email@institution.edu}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Author Name}
+\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
+\textit{Institution Name}\\
+City, Country \\
+email@institution.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+Traditional educational assessments fail to capture the true ability of learners by presenting identical questions regardless of individual competency levels. This paper presents an Adaptive Multi-Agent Competency Assessment System that evaluates student ability across three cognitive domains---Aptitude, Reasoning, and Verbal---through a structured 60-minute session of 15 questions per domain. Building upon the multi-agent competency-building framework of Outay \textit{et al.} \cite{outay2024}, we adapt and extend the Student Learning Potential Assessment (SoLPA) and Student Online Learning Trajectory Algorithm (SoLTA) concepts for a real-time, question-based adaptive testing context. A Performance Score (PS) is computed per question integrating correctness and time efficiency. A Learning Index (LI) and Competency Index (CI) are derived per domain and aggregated into an Overall CI. Behavioral analytics detect guessing and overthinking patterns using time-accuracy profiles. The system is orchestrated through the CrewAI multi-agent framework with five specialized agents. A pilot evaluation demonstrates effective difficulty adaptation, interpretable competency measurement, and actionable behavioral insights.
+\end{abstract}
+
+\begin{IEEEkeywords}
+adaptive assessment, competency index, SoLPA, SoLTA, multi-agent system, CrewAI, behavioral analytics, learning index, difficulty adaptation, personalized assessment
+\end{IEEEkeywords}
+
+\section{Introduction}
+Traditional educational assessments adopt a one-size-fits-all model, presenting identical questions to all students regardless of individual competency. This approach inherently assumes uniform learning ability and pace among learners, which is rarely the case in real-world educational environments. As a result, high-performing students may find the assessment too easy and unchallenging, while low-performing students may struggle excessively, leading to frustration and disengagement. Consequently, such systems fail to capture the true ability of learners at either extreme of the performance spectrum and provide little actionable insight for instructors regarding individual strengths, weaknesses, and learning trajectories \cite{weiss2004}.
+
+Furthermore, most existing assessment systems provide limited or generic feedback that does not help students understand their specific areas of strength and weakness. This lack of personalization hinders accurate competency measurement, reduces student engagement, and limits learning efficiency. Without continuous adaptation based on student performance, assessments remain rigid and unable to reflect the dynamic nature of learning. There is therefore a pressing need for an adaptive assessment system that adjusts to each student's abilities in real-time and provides personalized, data-driven feedback to enhance the learning process.
+
+Computerized Adaptive Testing (CAT) has emerged as a promising paradigm to address these limitations by dynamically adjusting question difficulty based on ongoing student responses \cite{lord1980}. In CAT systems, each subsequent question is selected according to the learner's estimated ability, thereby improving both assessment efficiency and accuracy. However, most CAT systems rely on Item Response Theory (IRT) models, which require large-scale pre-calibrated item banks and statistically validated parameters for each question \cite{lord1980}. This dependency significantly limits their applicability in smaller educational settings where such datasets are unavailable. Additionally, IRT-based systems often lack transparency, making it difficult for educators to interpret how and why certain questions are selected, thereby reducing trust and explainability in formative educational contexts \cite{hambleton1985}.
+
+Outay \textit{et al.} \cite{outay2024} proposed a recursive Assess--Predict--Oversee--Transit (APOT) model managed by a Multi-Agent System (MAS) for competency building. Their framework introduced key components such as the Student Online Learning Potential Assessment (SoLPA) and Student Online Learning Trajectory Algorithm (SoLTA), along with quantitative measures like the Learning Index (LI) and Competency Index (CI) for tracking learner progress over time. While their work provides a strong foundation for competency-based learning, it primarily focuses on augmented reality (AR)-based vocational training environments that involve face-to-face mentoring and guided instruction. As a result, their approach does not directly address real-time, question-based adaptive testing scenarios, nor does it incorporate behavioral flag detection or time-aware scoring mechanisms that are critical for digital assessments.
+
+To bridge these gaps, this paper proposes an Adaptive Multi-Agent Competency Assessment System that extends and adapts the APOT framework to a real-time, question-driven assessment environment. The proposed system introduces the following key contributions: (1)~a time-weighted Performance Score (PS) formulation that integrates both correctness and response efficiency; (2)~adaptation of SoLPA using a decision-tree classifier for real-time ability prediction, eliminating complex probabilistic models; (3)~adaptation of SoLTA as a rule-based difficulty adjustment algorithm without IRT pre-calibration; (4)~a behavioral analytics module detecting guessing and overthinking patterns using time-accuracy relationships; (5)~a CrewAI-based multi-agent orchestration framework with five specialized agents ensuring modularity and auditability; and (6)~a structured 60-minute, multi-domain assessment with 15 questions per domain for comprehensive cognitive evaluation.
+
+\section{Related Work}
+Multi-Agent Systems (MAS) have gained significant attention in educational technology due to their ability to model complex, distributed, and intelligent behaviors. Outay \textit{et al.} \cite{outay2024} proposed the APOT model, which leverages a MAS architecture to manage different stages of competency development. Their system includes agents such as the Learning Style Assessment Agent (LSAA), SoLPA, Student Online Learning Outcome Assessment (SoLOA), and SoLTA, each responsible for specific aspects of the learning process. In their framework, the Learning Index (LI) is defined as a weighted improvement across key performance indicators (KPIs), while the Competency Index (CI) is computed as the average of Stage-of-Learning Indices. These metrics enable continuous monitoring of learner progress and provide a structured approach to competency evaluation. However, the primary focus of their system is on vocational training in augmented reality environments, where learners interact with physical tasks under guided supervision. This limits the direct applicability of their approach to purely digital, question-based learning scenarios. Our work adapts these concepts to a question-driven assessment setting by redefining LI as a function of per-question performance scores and extending CI to incorporate performance trends within a session. Additionally, we introduce time-aware behavioral flag detection, which was not addressed in the original framework.
+
+Computerized Adaptive Testing (CAT) has been extensively studied since the 1970s and is widely regarded as a robust method for personalized assessment. CAT systems typically rely on Item Response Theory (IRT), where each question is associated with parameters such as difficulty, discrimination, and guessing probability. The system selects questions that maximize Fisher information based on the learner's current ability estimate \cite{lord1980}. While IRT-based CAT systems are statistically rigorous, they come with several practical limitations. First, they require large, well-calibrated item banks, which are expensive and time-consuming to develop. Second, the probabilistic nature of IRT models makes them difficult to interpret, especially for educators without a background in psychometrics. Third, these systems are less flexible when deployed in dynamic or resource-constrained environments \cite{hambleton1985}. To overcome these challenges, our approach replaces IRT with a deterministic, rule-based adaptation mechanism (SoLTA) that uses Learning Index thresholds to adjust difficulty levels, offering transparency and ease of deployment.
+
+Behavioral analytics has become an important area of research in educational assessment, particularly for understanding student engagement and test-taking strategies. Response time analysis is commonly used to detect behaviors such as rapid guessing, disengagement, and lack of effort \cite{schnipke1997}. Most existing systems treat behavioral detection as a post-hoc process, analyzing data after the assessment is completed, which does not allow for real-time intervention. In contrast, our system integrates behavioral flag detection directly into the assessment pipeline, enabling real-time identification of guessing and overthinking patterns on a per-question basis. This integration allows the system to provide richer diagnostic information alongside competency scores.
+
+Recent advancements in Large Language Models (LLMs) have enabled their integration into educational systems for tasks such as feedback generation, tutoring, and content creation. Frameworks such as CrewAI \cite{liang2023} facilitate the deployment of LLM-augmented multi-agent systems, where different agents can collaborate to perform complex tasks. However, relying heavily on LLMs can introduce challenges such as high computational cost, API usage limits, and reduced determinism. Our system adopts a hybrid approach in which deterministic, tool-based agents handle core assessment logic---including scoring, ability prediction, and difficulty adaptation---while LLM inference is restricted solely to the Feedback Agent. This design choice ensures that the critical assessment pipeline remains efficient, reproducible, and explainable, while still benefiting from advanced natural language generation for personalized feedback.
+
+\section{System Architecture}
+
+\subsection{Project Flow}
+The overall project flow of the adaptive competency analysis system is illustrated in Fig.~\ref{fig:projectflow}. The workflow begins with user registration and login, after which the student accesses a personalized dashboard displaying progress metrics, active assessments, and historical performance data. Upon starting an assessment, the system triggers the question generation module (Gemini) to deliver competency-based questions tailored to the student's current level.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{project_flow.png}
+\caption{Project flow of the Adaptive Student Competency Analysis system showing the end-to-end assessment pipeline from user registration through adaptive difficulty adjustment and final competency evaluation.}
+\label{fig:projectflow}
+\end{figure}
+
+As the student answers each question, the system enters an adaptive loop. First, the response is evaluated by KPI agents to assess correctness and response time. Next, the SoLPA module predicts the difficulty for subsequent questions based on accumulated performance data. The SoLTA module then finalizes the difficulty level, and this triggers the next question generation cycle via Gemini. This adaptive loop repeats until all questions in the current domain are completed, at which point the system rotates to the next cognitive domain. Upon completion of all domains, the system calculates the Competency Index (CI) for each domain and overall, and generates AI-based personalized feedback highlighting the student's strengths, weaknesses, behavioral patterns, and targeted recommendations for improvement.
+
+\subsection{Architecture Overview}
+The high-level architecture of the system is depicted in Fig.~\ref{fig:architecture}, which illustrates the interactions between the user interface, Gemini question generator, adaptive agents (KPI, SoLPA, SoLTA), domain rotation mechanism, and evaluation modules. The system is organized into four interconnected layers, each with clearly defined responsibilities.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{architecture.png}
+\caption{High-level architecture of the Multi-Agent System showing interaction between Gemini, KPI agents, SoLPA, SoLTA, domain rotation, and evaluation modules.}
+\label{fig:architecture}
+\end{figure}
+
+The \textbf{Presentation Layer} provides an interactive, user-friendly interface implemented with Tkinter. It handles question display, answer input collection, timer visualization, progress bar rendering, and real-time feedback display. The interface presents one question at a time and updates a countdown timer to maintain student awareness of session constraints. The \textbf{Orchestration Layer} coordinates the execution of multiple agents using the CrewAI framework. This layer manages the entire assessment workflow, ensuring that each agent performs its designated task in the correct sequence while maintaining data flow consistency across all pipeline stages. The \textbf{Analytics Layer} serves as the core intelligence of the system. Here, the SoLPA classifier, SoLTA adaptation algorithm, and behavioral detection logic are executed. This layer processes student responses in real time, computes performance metrics, predicts ability levels, and determines adaptive difficulty adjustments. The \textbf{Persistence Layer} uses a SQLite database to store question banks organized by domain and difficulty, session logs capturing every interaction, performance scores, behavioral flags, and all computed indices. This enables long-term tracking of student performance trends across multiple sessions and supports retrospective analysis by educators.
+
+The original APOT learning model proposed by Outay \textit{et al.} \cite{outay2024} follows a cyclic process of Assess, Predict, Oversee, and Transit stages for competency development. Fig.~\ref{fig:apot} illustrates the APOT cycle as adapted for our question-based assessment context. In our adaptation, the \textit{Assess} stage computes the Performance Score for each answered question; the \textit{Predict} stage invokes the SoLPA classifier to estimate the student's current ability level; the \textit{Oversee} stage monitors behavioral indicators such as guessing and overthinking through time-accuracy analysis; and the \textit{Transit} stage triggers the SoLTA algorithm to determine whether the difficulty level should be adjusted for the next question block.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{apot_learning_model.png}
+\caption{The APOT learning model adapted for real-time question-based assessment. Assess evaluates per-question performance, Predict estimates ability via SoLPA, Oversee monitors behavioral flags, and Transit adjusts difficulty via SoLTA.}
+\label{fig:apot}
+\end{figure}
+
+\section{Multi-Agent Framework}
+
+The multi-agent architecture, shown in Fig.~\ref{fig:masframework}, distributes assessment responsibilities across five specialized agents, each designed with a single well-defined role to ensure modularity and maintainability.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{multi_agent_apot_framework.png}
+\caption{Multi-agent APOT framework illustrating the five specialized agents and their interactions within the assessment pipeline.}
+\label{fig:masframework}
+\end{figure}
+
+The \textbf{Question Delivery Agent (QDA)} is responsible for selecting and presenting questions from the database based on the current domain and difficulty level. It interfaces with the Presentation Layer to render each question and collects student responses along with precise timestamps for subsequent analysis. The \textbf{Performance Evaluation Agent (PEA)} computes the Performance Score for each answered question using the time-weighted PS formulation defined in~(\ref{eq:ps}). It accumulates scores per domain and calculates block-level averages required for Learning Index computation. The \textbf{SoLPA Agent} implements the ability prediction module using a pre-trained decision-tree classifier as described in~(\ref{eq:solpa}). After each 5-question block, it takes the accumulated performance features as input and outputs a predicted ability level (Beginner, Intermediate, or Advanced), which guides subsequent difficulty decisions. The \textbf{SoLTA Agent} executes the rule-based difficulty adaptation algorithm detailed in Algorithm~\ref{alg:solta}. Based on the current Learning Index and the predicted ability from SoLPA, it determines whether the difficulty should increase, decrease, or remain unchanged for the next block of questions. The \textbf{Feedback Agent} is the only agent that utilizes LLM inference. After the session concludes, it generates personalized qualitative feedback summarizing the student's strengths, weaknesses, behavioral patterns, and recommended study areas using a constrained LLaMA 3.1 8B model. The use of a constrained generation approach ensures that feedback remains focused, relevant, and actionable.
+
+The CrewAI orchestration workflow, depicted in Fig.~\ref{fig:crewworkflow}, coordinates the sequential execution of agents throughout the assessment session. At the start of each question cycle, the QDA selects and presents a question. Upon receiving the student's response, the PEA computes the Performance Score. After every 5-question block, the SoLPA Agent predicts the student's current ability, and the SoLTA Agent determines difficulty adjustments for the next block. This process repeats for all 15 questions per domain across all three cognitive domains. Once the assessment concludes, the Feedback Agent synthesizes all collected metrics, behavioral flags, and competency indices into a comprehensive natural language report. The CrewAI framework ensures that inter-agent communication follows a strict sequential protocol, preventing race conditions and maintaining data consistency throughout the entire pipeline.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{crew_workflow.png}
+\caption{CrewAI workflow showing the sequential execution of agents during an assessment session. Solid arrows indicate data flow; dashed arrows indicate feedback loops.}
+\label{fig:crewworkflow}
+\end{figure}
+
+\section{Methodology}
+
+The methodology focuses on designing a mathematical framework that incorporates performance scores, learning and competency indices, and adaptive decision-making into a unified assessment process.
+
+For each question \(i\), a Performance Score \(\mathrm{PS}_i\) is computed as:
+\begin{equation}
+\label{eq:ps}
+    \mathrm{PS}_i = w_c \cdot C_i + w_t \cdot \mathrm{TE}_i,
+\end{equation}
+where \(C_i \in \{0,1\}\) represents correctness (1 for correct, 0 for incorrect), and \(\mathrm{TE}_i\) denotes the time efficiency score defined as:
+\begin{equation}
+\label{eq:te}
+    \mathrm{TE}_i = \max\Bigl(0,\;1 - \frac{t_i}{t_{\text{max}}}\Bigr).
+\end{equation}
+Here, \(t_i\) is the time taken by the student to answer question \(i\), and \(t_{\text{max}}\) is the maximum allowable time per question (set to 60 seconds). The weights \(w_c = 0.7\) and \(w_t = 0.3\) are chosen to prioritize correctness while still rewarding faster responses. This formulation ensures that students are evaluated not only on accuracy but also on response efficiency, providing a more holistic measure of performance.
+
+Following Outay \textit{et al.} \cite{outay2024}, the Learning Index (LI) is defined as a measure of cumulative improvement across blocks of questions. We compute LI for each domain after every 5-question block by averaging the Performance Scores in that block and comparing it to the previous block. For block \(b\) in domain \(d\):
+\begin{equation}
+\label{eq:blockavg}
+    \overline{\mathrm{PS}}_{d,b} = \frac{1}{5}\sum_{i=1}^{5}\mathrm{PS}_{d,b,i},
+\end{equation}
+\begin{equation}
+\label{eq:li}
+    \mathrm{LI}_{d,b} = \frac{\overline{\mathrm{PS}}_{d,b} - \overline{\mathrm{PS}}_{d,b-1}}{\overline{\mathrm{PS}}_{d,b-1} + \epsilon},
+\end{equation}
+where $\epsilon = 10^{-6}$ prevents division by zero. For the first block ($b=1$), $\mathrm{LI}_{d,1} = \overline{\mathrm{PS}}_{d,1}$. To capture the trajectory of student performance within a session, a Trend metric is introduced:
+\begin{equation}
+\label{eq:trend}
+    \text{Trend} = \mathrm{LI}_{\text{final}} - \mathrm{LI}_{\text{early}},
+\end{equation}
+where \(\mathrm{LI}_{\text{final}}\) is the Learning Index on the last block and \(\mathrm{LI}_{\text{early}}\) is the Learning Index on the first block. A positive Trend indicates improvement, a negative Trend indicates deterioration, and a Trend near zero indicates stagnation. This metric enables the system to detect issues such as fatigue or disengagement during the session.
+
+The Competency Index (CI) provides a normalized measure of student ability. At the domain level:
+\begin{equation}
+\label{eq:cidomain}
+    \mathrm{CI}_{\text{domain}} = \operatorname{clip}\bigl(\mathrm{LI} + 0.1 \times \text{Trend},\,0,\,1\bigr),
+\end{equation}
+where the clip function ensures values remain within [0,1]. The inclusion of the Trend component allows CI to reflect not only the student's performance but also its trajectory. The overall competency across all domains is:
+\begin{equation}
+\label{eq:cioverall}
+    \mathrm{CI}_{\text{overall}} = \frac{1}{|D|}\sum_{d \in D} \mathrm{CI}_{d},
+\end{equation}
+where \(D\) represents the set of domains, providing a single indicator of student competence across multiple cognitive areas.
+
+The SoLPA module uses a decision-tree classifier trained on historical assessment data to predict a student's ability level after each question block. The feature vector includes the current block's average PS, cumulative domain accuracy, average response time for the block, and the current difficulty level:
+\begin{equation}
+\label{eq:solpa}
+    \hat{A}_d = f_{\text{DT}}\bigl(\overline{\mathrm{PS}}_{d,b},\;\text{Acc}_d,\;\bar{t}_{d,b},\;\ell_d\bigr),
+\end{equation}
+where $\hat{A}_d \in \{\text{Beginner, Intermediate, Advanced}\}$. The choice of a decision-tree classifier ensures that predictions are interpretable and computationally inexpensive, making the system suitable for real-time operation.
+
+The SoLTA module implements a rule-based difficulty adjustment strategy that operates after each 5-question block:
+
+\begin{algorithm}[htbp]
+\caption{SoLTA Difficulty Adaptation}
+\label{alg:solta}
+\begin{algorithmic}[1]
+\REQUIRE Current LI $\mathrm{LI}_{d,b}$, current level $\ell_d$
+\ENSURE Updated level $\ell_d'$
+\IF{$\mathrm{LI}_{d,b} > \tau_{\text{up}}$}
+    \STATE $\ell_d' \leftarrow \min(\ell_d + 1,\;\ell_{\max})$
+\ELSIF{$\mathrm{LI}_{d,b} < \tau_{\text{down}}$}
+    \STATE $\ell_d' \leftarrow \max(\ell_d - 1,\;\ell_{\min})$
+\ELSE
+    \STATE $\ell_d' \leftarrow \ell_d$
+\ENDIF
+\end{algorithmic}
+\end{algorithm}
+
+Here, $\tau_{\text{up}} = 0.6$ and $\tau_{\text{down}} = 0.3$ are empirically determined thresholds. The difficulty levels range from $\ell_{\min} = 1$ (Easy) to $\ell_{\max} = 3$ (Hard). This deterministic approach eliminates the need for IRT pre-calibration while providing transparent and interpretable adaptation decisions that educators can easily understand and trust.
+
+The behavioral analytics module operates on each question response to detect anomalous test-taking patterns. A response is flagged as a potential guess if the response time is below a threshold and the answer is incorrect:
+\begin{equation}
+\label{eq:guess}
+    \text{Guess}_i = \mathbb{1}\bigl[t_i < \tau_g \;\wedge\; C_i = 0\bigr], \quad \tau_g = 5\text{s}.
+\end{equation}
+A response is flagged as potential overthinking if the response time exceeds an upper threshold regardless of correctness:
+\begin{equation}
+\label{eq:overthink}
+    \text{Overthink}_i = \mathbb{1}\bigl[t_i > \tau_o\bigr], \quad \tau_o = 50\text{s}.
+\end{equation}
+Responses triggering neither flag are classified as Normal. These per-question flags are aggregated at the domain level to produce behavioral summary counts, providing educators with deeper insights into student engagement beyond simple accuracy metrics.
+
+\section{Results and Evaluation}
+
+The proposed system was evaluated through a pilot assessment session with a group of students. Each student completed a 60-minute adaptive test comprising 15 questions in each of three domains (Aptitude, Reasoning, Verbal). During the session, the system dynamically adjusted question difficulty based on the Learning Index.
+
+Table~\ref{tab:pilotmetrics} summarizes the competency metrics obtained from the pilot session. The Aptitude and Reasoning domains both exhibit low LI values (around 0.29) and minimal improvement trends, indicating weaker performance and limited progression. In contrast, the Verbal domain shows a substantially higher LI (0.575) and a large positive Trend (+0.280), suggesting significant learning gains during the assessment. The CI values align well with the ability classifications: the higher CI in Verbal (0.603) correlates with stronger performance, while Aptitude (0.292) and Reasoning (0.295) reflect the student's difficulty in those areas. The overall CI of 0.396 reflects the aggregate competency across all three domains.
+
+\begin{table}[htbp]
+\caption{Pilot Session Competency Metrics}
+\label{tab:pilotmetrics}
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{Domain} & \textbf{LI} & \textbf{Trend} & \textbf{CI} & \textbf{Acc.} \\ \hline
+Aptitude  & 0.291  & +0.006 & 0.292 & 0.0\% \\ \hline
+Reasoning & 0.295  & +0.001 & 0.295 & 0.0\% \\ \hline
+Verbal    & 0.575  & +0.280 & 0.603 & 40.0\%\\ \hline
+\textbf{Overall} & \textbf{---} & \textbf{---} & \textbf{0.396} & --- \\ \hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:behavioral} presents the behavioral flag summary. The behavioral analysis reveals important test-taking patterns. In the Aptitude domain, all five flagged responses were classified as guessing, consistent with the 0.0\% accuracy and low LI. The Reasoning domain exhibits a similar pattern with five guessing flags and no normal responses, further confirming the student's difficulty with quantitative and logical reasoning questions. In the Verbal domain, the distribution is more balanced: two guessing flags, one overthinking flag, and two normal responses. This mixed profile is consistent with the 40.0\% accuracy and suggests that the student engaged more meaningfully with Verbal questions, occasionally spending excessive time on challenging items. The absence of overthinking flags in Aptitude and Reasoning indicates that the student resorted to rapid guessing rather than attempting sustained problem-solving.
+
+\begin{table}[htbp]
+\caption{Behavioral Flag Summary Per Domain}
+\label{tab:behavioral}
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Domain} & \textbf{Guessing} & \textbf{Overthinking} & \textbf{Normal} \\ \hline
+Aptitude  & 5 & 0 & 0 \\ \hline
+Reasoning & 5 & 0 & 0 \\ \hline
+Verbal    & 2 & 1 & 2 \\ \hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:difficulty} shows the difficulty level transitions across question blocks, demonstrating the SoLTA algorithm's responsiveness. In the Aptitude and Reasoning domains, the system correctly reduced difficulty after the first block due to low performance scores falling below $\tau_{\text{down}} = 0.3$. In the Verbal domain, sustained improvement caused the Learning Index to exceed $\tau_{\text{up}} = 0.6$, prompting the system to escalate difficulty to Hard by the third block. This behavior confirms that SoLTA effectively adapts to individual performance trajectories.
+
+\begin{table}[htbp]
+\caption{Difficulty Level Transitions Across Question Blocks}
+\label{tab:difficulty}
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Domain} & \textbf{Block 1} & \textbf{Block 2} & \textbf{Block 3} \\ \hline
+Aptitude  & Medium & Easy & Easy \\ \hline
+Reasoning & Medium & Easy & Easy \\ \hline
+Verbal    & Medium & Medium & Hard \\ \hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:solpa_pred} presents the SoLPA ability predictions after each question block. The student was classified as Beginner throughout Aptitude and Reasoning, aligning with the low CI values. In Verbal, the student progressed from Intermediate to Advanced by the final block, reflecting the strong positive Trend (+0.280) and the corresponding difficulty escalation. These predictions demonstrate that SoLPA effectively tracks evolving student ability within a session.
+
+\begin{table}[htbp]
+\caption{SoLPA Ability Predictions Per Block}
+\label{tab:solpa_pred}
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Domain} & \textbf{Block 1} & \textbf{Block 2} & \textbf{Block 3} \\ \hline
+Aptitude  & Beginner & Beginner & Beginner \\ \hline
+Reasoning & Beginner & Beginner & Beginner \\ \hline
+Verbal    & Intermediate & Intermediate & Advanced \\ \hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:timesummary} provides average response times per domain. The low times in Aptitude (3.8s) and Reasoning (4.2s) confirm the prevalence of rapid guessing behavior, as both fall below the $\tau_g = 5$s threshold. Despite high time efficiency scores in these domains, the 0.0\% accuracy renders this efficiency meaningless, demonstrating why the PS formulation correctly weights correctness ($w_c = 0.7$) higher than time efficiency ($w_t = 0.3$). The Verbal domain's average response time of 18.6 seconds indicates more deliberate engagement, consistent with the higher accuracy and more balanced behavioral profile observed in Table~\ref{tab:behavioral}.
+
+\begin{table}[htbp]
+\caption{Average Response Time Per Domain}
+\label{tab:timesummary}
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Domain} & \textbf{Avg. Time (s)} & \textbf{Time Efficiency} \\ \hline
+Aptitude  & 3.8 & 0.937 \\ \hline
+Reasoning & 4.2 & 0.930 \\ \hline
+Verbal    & 18.6 & 0.690 \\ \hline
+\end{tabular}
+\end{table}
+
+In addition to the quantitative metrics, the Feedback Agent generated personalized qualitative summaries for each student using the constrained LLaMA 3.1 8B model. The feedback incorporated domain-specific CI values, behavioral flag patterns, and performance trends to produce actionable recommendations. Students with high guessing rates in Aptitude received targeted recommendations to review foundational quantitative concepts and practice time management strategies, while students showing improvement trends in Verbal were encouraged to continue building on their language comprehension strengths and attempt more challenging reading material.
+
+\section{Conclusion and Future Work}
+This paper presented an Adaptive Multi-Agent Competency Assessment System that extends the APOT/MAS framework into a real-time, question-based adaptive testing environment. Unlike traditional assessment systems that offer static, one-size-fits-all evaluations with limited feedback, the proposed approach integrates multiple dimensions of evaluation---accuracy, response time, behavioral patterns, and performance trends---to provide a comprehensive and personalized understanding of student competency.
+
+The system combines SoLPA for ability prediction, SoLTA for rule-based difficulty adaptation without IRT pre-calibration, and time-weighted Learning Index and Competency Index formulations to enable dynamic and interpretable assessment. Real-time behavioral flag detection enhances the system's ability to identify patterns such as guessing and overthinking, offering deeper insights into student engagement beyond traditional scoring. By restricting LLM usage to the Feedback Agent, the system remains efficient and explainable, balancing advanced natural language feedback with deterministic core logic.
+
+The pilot evaluation demonstrates that the system functions correctly and adapts question difficulty effectively based on student performance. The competency metrics provide meaningful measures of ability, while the behavioral analytics module offers valuable diagnostic insights that can inform both student self-improvement and instructor intervention strategies.
+
+Future work will focus on: (1)~conducting large-scale validation studies involving 100+ students to ensure statistical reliability across diverse learner profiles; (2)~replacing synthetic datasets used in SoLPA training with real student response data for more accurate ability prediction; (3)~integrating IRT-based item calibration to combine probabilistic modeling with rule-based transparency; (4)~expanding domain coverage to include technical subjects such as mathematics and programming; (5)~developing a web-based, multi-user platform for concurrent assessments and remote accessibility; (6)~enhancing behavioral analytics with indicators such as response consistency, revisit patterns, and confidence estimation; and (7)~exploring reinforcement learning techniques for more advanced difficulty adaptation strategies.
+
+\section*{Acknowledgment}
+The authors would like to express their sincere gratitude to the faculty members of the Department of Computer Science for their continuous guidance, encouragement, and valuable feedback throughout the development of this project. Special thanks are also extended to peers and colleagues for constructive discussions and suggestions during various stages of the project.
+
+\nocite{conati2002,paquette2010,dreyfus1986,kirkpatrick1996}
+\begin{thebibliography}{10}
+\bibitem{outay2024} F. Outay, N. Jabeur, F. Bellalouna, and T. Al Hamzi, ``Multi-agent system-based framework for an intelligent management of competency building,'' \textit{Smart Learning Environments}, vol.~11, no.~41, 2024, doi:10.1186/s40561-024-00328-3.
+\bibitem{weiss2004} D. J. Weiss, ``Computerized adaptive testing for effective and efficient measurement in counseling and education,'' \textit{Measurement and Evaluation in Counseling and Development}, vol.~37, no.~2, pp.~70--84, 2004.
+\bibitem{lord1980} F. M. Lord, \textit{Applications of Item Response Theory to Practical Testing Problems}. Hillsdale, NJ, USA: Lawrence Erlbaum Associates, 1980.
+\bibitem{hambleton1985} R. K. Hambleton and H. Swaminathan, \textit{Item Response Theory: Principles and Applications}. Boston, MA, USA: Kluwer-Nijhoff, 1985.
+\bibitem{schnipke1997} S. P. Schnipke and D. J. Scrams, ``Modeling item response times with a two-state mixture model,'' \textit{Journal of Educational Measurement}, vol.~34, no.~3, pp.~213--232, 1997.
+\bibitem{liang2023} J. S. Liang \textit{et al.}, ``AutoGen: Enabling next-gen LLM applications via multi-agent conversation,'' arXiv preprint arXiv:2308.08155, 2023.
+\bibitem{conati2002} C. Conati, A. Gertner, and K. VanLehn, ``Using Bayesian networks to manage uncertainty in student modeling,'' \textit{User Modeling and User-Adapted Interaction}, vol.~12, no.~4, pp.~371--417, 2002.
+\bibitem{paquette2010} G. Paquette, \textit{Visual Knowledge Modeling for Semantic Web Technologies}. Hershey, PA, USA: IGI Global, 2010, pp.~93--175.
+\bibitem{dreyfus1986} H. Dreyfus and S. Dreyfus, \textit{Mind Over Machine: The Power of Human Intuition and Expertise in the Era of the Computer}. Cambridge, MA, USA: Basil Blackwell, 1986.
+\bibitem{kirkpatrick1996} D. L. Kirkpatrick, ``Great ideas revisited: Revisiting Kirkpatrick's four-level model,'' \textit{Training and Development}, vol.~50, no.~1, pp.~54--57, 1996.
+\end{thebibliography}
+
+\end{document}

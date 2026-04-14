@@ -1,0 +1,881 @@
+================================================================================
+           SENTINEL AI — index.html COMPLETE CODE EXPLANATION
+================================================================================
+Every section, every CSS variable, every JavaScript function explained.
+Use this to answer any question about the frontend during your review.
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: HTML DOCUMENT SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  <!DOCTYPE html>
+    → Tells the browser this is an HTML5 document.
+    → Without this, browsers enter "quirks mode" — old compatibility mode
+      that handles CSS and layout differently (bugs would appear).
+
+  <html lang="en">
+    → Root element. lang="en" tells screen readers and search engines
+      the page is in English.
+
+  <head>
+    → Contains metadata — information ABOUT the page, not visible content.
+
+  <meta charset="UTF-8">
+    → Sets character encoding to UTF-8.
+    → UTF-8 supports ALL Unicode characters (emojis, special symbols, etc.).
+    → Without this, special characters like ✓ and ⚠ might display as garbage.
+
+  <title>SENTINEL AI — Smart Surveillance</title>
+    → Text shown in the browser tab.
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+    → Pre-connects to Google Fonts CDN before actually fetching fonts.
+    → Reduces font loading delay by establishing the TCP connection early.
+
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:...&display=swap" rel="stylesheet">
+    → Loads two custom fonts from Google Fonts:
+      Rajdhani: Used for UI labels, buttons, headings (futuristic look).
+      JetBrains Mono: Used for data values, code-style numbers (monospace — 
+        all characters same width, making numbers align perfectly in columns).
+    → display=swap: Shows fallback font first, swaps to custom font when loaded.
+      Prevents blank text during loading.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: CSS — VARIABLES (:root)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  :root { ... }
+    → :root is the highest-level CSS selector — matches the <html> element.
+    → CSS Custom Properties (variables) defined here are available everywhere.
+    → Syntax: --variable-name: value;
+    → Used as: color: var(--accent);
+
+  The design uses a dark color system:
+    --bg: #060a0f        → Deepest background (nearly black, slight blue tint)
+    --bg2: #0b1220       → Slightly lighter background (sidebar, controls bar)
+    --bg3: #0f1a2e       → Even lighter (hover states, modal background)
+    --border: #162440    → Subtle border color (separates sections)
+    --border2: #1e3055   → Slightly brighter border (interactive elements)
+
+  Status/semantic colors:
+    --accent: #00c8ff    → Cyan blue (primary brand color, headings, icons)
+    --accent2: #0090cc   → Darker cyan (button borders, secondary accents)
+    --danger: #ff2d55    → Red (danger alerts, critical threats)
+    --warn: #ff9500      → Orange (warning alerts, non-critical incidents)
+    --ok: #00e87a        → Bright green (normal/safe status)
+    --ok2: #00a854       → Darker green (secondary safe indicators)
+    --text: #b8d4ee      → Primary text (cool white-blue)
+    --text2: #6a8dac     → Secondary text (dimmer, for labels)
+    --text3: #3a5570     → Tertiary text (very dim, for hints/metadata)
+
+  Typography:
+    --mono: 'JetBrains Mono', monospace  → For numbers, codes, data values
+    --ui: 'Rajdhani', sans-serif         → For labels, buttons, headings
+
+  WHY CSS VARIABLES?
+    → Single point of change: to make all danger colors purple instead of red,
+      change one line. Without variables, you'd search-replace hundreds of places.
+    → Consistency: all components automatically use the same color palette.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: CSS — GLOBAL RESET AND BODY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+    → Universal selector (*) resets all elements.
+    → box-sizing:border-box: Width includes padding and border.
+      Default (content-box): width=content only; padding adds to total size.
+      border-box: width=total box size; easier to calculate layouts.
+    → margin:0; padding:0: Removes browser default spacing.
+      Different browsers have different defaults — this ensures consistency.
+    → ::before and ::after are "pseudo-elements" — CSS can insert decorative
+      content before/after elements without adding HTML.
+
+  html, body { height:100%; overflow:hidden }
+    → Makes the page exactly fit the viewport (no scrolling on main page).
+    → overflow:hidden prevents scrollbars from appearing.
+    → All scrolling happens inside the event log div, not the whole page.
+
+  body::before { ... scanline effect ... }
+    → Creates a subtle horizontal scanline pattern using CSS gradients.
+    → repeating-linear-gradient creates repeating stripes.
+    → This gives the UI a retro CRT monitor appearance.
+    → position:fixed; inset:0: Covers the entire viewport.
+    → pointer-events:none: Mouse events pass through this overlay.
+    → z-index:9998: Sits on top of almost everything but below modal.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: CSS — HEADER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #header { display:grid; grid-template-columns:auto 1fr auto; ... }
+    → CSS Grid layout with 3 columns:
+      auto: Logo/brand section (takes only as much space as needed)
+      1fr:  Model pills section (takes all remaining space)
+      auto: Stats section (takes only as much space as needed)
+    → height:52px: Fixed header height.
+    → position:relative; z-index:100: Header stays above video content.
+
+  .h-logo-mark { animation:logoGlow 3s ease-in-out infinite }
+  @keyframes logoGlow { 0%,100% { box-shadow: ... } 50% { box-shadow: ... } }
+    → Defines a pulsing glow animation on the logo box.
+    → @keyframes: Defines animation keyframes (checkpoints in time).
+    → ease-in-out: Animation accelerates at start and decelerates at end.
+    → infinite: Loops forever.
+    → The box-shadow changes size at 50% = pulsing cyan glow effect.
+
+  .model-pill .dot { animation: blink 2s ease-in-out infinite }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    → Makes each status dot blink (opacity 100% → 30% → 100%).
+    → Creates a "live" indicator effect.
+
+  .rec-dot.live { animation: pulse 1.2s ease-in-out infinite }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,45,85,.5)}
+                     50%{box-shadow:0 0 0 5px rgba(255,45,85,0)} }
+    → "LIVE" indicator pulsing ring effect.
+    → box-shadow starts at radius 0 (solid dot), expands to 5px and fades out.
+    → This creates the ripple/radar effect seen on live broadcast indicators.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: CSS — LAYOUT SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #layout { display:grid; grid-template-columns:1fr 300px; height:calc(100vh - 52px) }
+    → The main content area below the header.
+    → Two columns: video panel takes all remaining space (1fr), sidebar fixed 300px.
+    → height: 100% of viewport minus header height (52px).
+    → calc() is CSS math — computes values combining units.
+
+  #videoPanel { display:flex; flex-direction:column; border-right:1px solid ... }
+    → Flexbox with vertical layout (column direction).
+    → Contains: controls bar (fixed height) + video display area (fills rest).
+
+  #controls { flex-shrink:0 }
+    → flex-shrink:0: This element doesn't shrink when space is tight.
+    → Ensures the controls bar stays at its natural height even if viewport is small.
+
+  #videoWrap { flex:1 }
+    → flex:1: Takes all remaining vertical space after controls bar.
+    → Contains the video canvas and overlays.
+
+  #sidebar { display:flex; flex-direction:column; overflow:hidden }
+    → Vertical flex layout for the right sidebar.
+    → overflow:hidden prevents sidebar content from escaping its bounds.
+    → Inner sections use flex-shrink:0; only event log area scrolls.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: CSS — BUTTONS AND CONTROLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  .btn { transition:all .15s; ... }
+    → transition:all .15s: ALL CSS property changes animate over 150ms.
+    → Makes hover effects smooth instead of instant/jarring.
+
+  .btn:hover { background:rgba(255,255,255,.07) }
+    → rgba(R,G,B,Alpha): Alpha 0.07 = 7% opacity white overlay.
+    → Subtle highlight when mouse hovers over button.
+
+  .btn:active { transform:scale(.96) }
+    → Slightly shrinks button when clicked (scale 96% of original size).
+    → Gives physical "press" feedback sensation.
+
+  .btn:disabled { opacity:.35; pointer-events:none }
+    → Dims button to 35% and disables ALL mouse interactions.
+    → pointer-events:none: Mouse events (click, hover) pass through.
+    → Used while connecting (prevents double-clicking webcam).
+
+  .upload-lbl (styled like a button)
+    → HTML file inputs can't be styled well with CSS.
+    → Solution: hide the <input type="file"> with display:none.
+    → Style a <label> element like a button.
+    → When label is clicked, it triggers the associated file input.
+    → The for attribute (on label) or wrapping (in our case wrapping)
+      links them together.
+
+  .sep { width:1px; height:20px; background:var(--border) }
+    → Visual divider line between button groups.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: CSS — VIDEO AREA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #videoCanvas { display:none }
+    → Hidden initially. Shown (display:block) when WebSocket connects.
+
+  #noSignal
+    → Placeholder shown when no source is active.
+    → Contains animated grid cells (ns-cell) that flicker.
+    → @keyframes nsFlash: opacity cycles between 0.3 and 0.8.
+    → nth-child() selectors add animation delays creating staggered effect.
+
+  #loadingOverlay { position:absolute; display:none }
+    → Covers video area during connecting/loading.
+    → position:absolute: Overlays on top of video canvas without moving it.
+    → display:none by default; .show class switches to display:flex.
+    → Contains: .spinner (rotating border) + .loading-txt (animated text).
+
+  .spinner { border-top-color:var(--accent); animation:spin .6s linear infinite }
+  @keyframes spin { to { transform:rotate(360deg) } }
+    → Classic CSS loading spinner.
+    → All borders are dark EXCEPT border-top which is cyan.
+    → rotate(360deg) makes it spin 360° in 0.6 seconds, forever.
+    → linear: Constant speed (no easing — spinner should spin smoothly).
+
+  .bracket (corner brackets):
+    → Four div elements positioned at each corner of the video.
+    → Each has only two borders (top+left, top+right, bottom+left, bottom+right).
+    → Creates the targeting/scanning frame aesthetic.
+    → position:absolute relative to #videoWrap.
+
+  #alertBanner
+    → Red/orange banner that appears at the BOTTOM of the video when threat detected.
+    → position:absolute; bottom:0: Anchored to bottom of video area.
+    → display:none by default; .show class makes it visible.
+    → @keyframes alertSlide: Slides up from below (translateY from 100% to 0).
+    → .warn-mode class changes colors from red to orange.
+    → backdrop-filter:blur(4px): Blurs video behind the banner (frosted glass effect).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: CSS — SIDEBAR COMPONENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  .sb-title::after { content:''; flex:1; height:1px; background:var(--border) }
+    → CSS pseudo-element creates a decorative horizontal line after the title.
+    → flex:1 makes the line stretch to fill remaining width.
+    → This is a common technique for "title with decorative line" without extra HTML.
+
+  .big-label-wrap (severity-aware container):
+    → Default state: dark background, subtle border.
+    → .sev-danger: red border and background tint.
+    → .sev-warn: orange border and background tint.
+    → .sev-normal: green border and background tint.
+    → transition:border-color .4s, background .4s: Changes animate smoothly.
+
+  .conf-track / .conf-fill (confidence bar):
+    → conf-track: the gray empty track bar
+    → conf-fill: the colored fill bar inside it
+    → width is set dynamically in JS: fill.style.width = conf + '%'
+    → transition:width .6s cubic-bezier(.4,0,.2,1): Smooth bar animation
+    → cubic-bezier: Custom easing curve (fast then slows to a stop — material design curve)
+    → .hi class (>75%): red fill. .md class (>50%): orange. Default: cyan.
+
+  .exp-area (AI explanation text box):
+    → Shows the LLaMA-generated alert text.
+    → white-space:pre-wrap: Preserves newlines in the explanation text.
+    → word-break:break-word: Long words wrap instead of overflowing.
+    → transition: Changes severity styling smoothly when label changes.
+
+  .log-row (event log entries):
+    → display:grid with 3 columns: time (52px), label (flex), confidence (44px).
+    → @keyframes logIn: Slides in from left with opacity.
+    → After 60 entries (logN > 60), oldest entry is removed from DOM.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: CSS — MODAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #overlay { position:fixed; inset:0; opacity:0; pointer-events:none }
+    → position:fixed: Stays in viewport even when scrolling.
+    → inset:0: Shorthand for top:0; right:0; bottom:0; left:0 — full screen.
+    → opacity:0: Invisible by default.
+    → pointer-events:none: Mouse can't interact when invisible (prevent ghost clicks).
+
+  #overlay.open { opacity:1; pointer-events:all }
+    → When JS adds 'open' class → modal becomes visible and interactive.
+    → transition:opacity .2s: Fades in over 200ms.
+
+  .modal { transform:translateY(10px); transition:transform .22s }
+  #overlay.open .modal { transform:none }
+    → Modal starts slightly below its final position (10px down).
+    → When overlay gets .open class, modal moves to normal position.
+    → Combined with the fade-in: Creates a subtle "rise up" entrance animation.
+
+  backdrop-filter:blur(8px)
+    → Blurs everything BEHIND the modal (the dashboard).
+    → Creates a frosted glass / depth-of-field effect.
+    → Modern CSS feature, supported in all current browsers.
+
+  .field input:focus { border-color:var(--accent) }
+    → Changes input border to cyan when user clicks/tabs into it.
+    → :focus pseudo-class activates when element has keyboard focus.
+    → Provides clear visual feedback of which field is active.
+
+  .url-preview (generated URL display):
+    → Shows the built RTSP URL as user types in fields.
+    → cursor:pointer + :hover border change: Looks clickable.
+    → onclick="copyUrlToField()": Clicking copies it to the text input below.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 10: HTML STRUCTURE — KEY ELEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  <canvas id="videoCanvas">
+    → HTML Canvas element — a drawing surface.
+    → Unlike <img>, we draw onto it with JavaScript using the Canvas 2D API.
+    → Video frames arrive as base64 JPEG strings.
+    → JS creates Image objects from them and draws onto the canvas.
+    → WHY CANVAS INSTEAD OF VIDEO TAG?
+      → WebSocket sends individual JPEG frames (not a video stream protocol).
+      → <video> tag needs continuous streams (HLS, DASH, WebRTC).
+      → Canvas lets us manually draw each received frame.
+
+  <div id="noSignal"> (placeholder):
+    → Shown when no source is active.
+    → 16 .ns-cell divs form the flickering grid.
+    → hidden when video starts: document.getElementById('noSignal').style.display='none'
+
+  <div id="loadingOverlay">
+    → Loading spinner shown while connecting.
+    → .show class toggles visibility.
+    → loadingTxt content changes per operation: "CONNECTING...", "UPLOADING...", etc.
+
+  <div id="alertBanner">
+    → Threat alert shown at bottom of video.
+    → .show class makes it visible.
+    → .warn-mode changes red → orange styling.
+    → alertLbl: Shows activity name (e.g., "FIGHTING DETECTED").
+    → alertTxt: Shows first sentence of LLM explanation.
+
+  Modal Form Fields (in CCTV modal):
+    → qIp: Camera IP address
+    → qPort: RTSP port (default 554)
+    → qUser: Login username
+    → qPass: Password (type="password" hides characters)
+    → qCh: Channel selection (1-4) using <select> dropdown
+    → qSub: Stream type (0=main HD, 1=sub SD) using <select>
+    → rtspUrl: Manual full URL override input
+
+  <input type="file" id="fileInput" accept="video/*">
+    → accept="video/*": Browser's file picker shows only video files.
+    → display:none: Hidden; activated by clicking the styled label.
+    → onchange="doUpload(this)": Triggers automatically when file is selected.
+
+  <div id="eventLog">
+    → Container for event log entries.
+    → New entries are prepended (insertBefore with firstChild).
+    → Old entries removed when count exceeds 60.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 11: JAVASCRIPT — CLOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  setInterval(() => document.getElementById('hTime').textContent = new Date().toLocaleTimeString('en-GB'), 1000);
+    → setInterval(callback, ms): Runs callback every 1000ms (1 second).
+    → new Date(): Gets current date/time.
+    → .toLocaleTimeString('en-GB'): Formats as HH:MM:SS (24-hour, UK format).
+    → Updates the SYS TIME display in the header.
+    → Arrow function () => {...} is ES6 shorthand for anonymous function.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 12: JAVASCRIPT — TOAST NOTIFICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let _tt;
+  function toast(msg, type='') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'show ' + type;  // 'show ok', 'show err', 'show wrn', or 'show'
+      clearTimeout(_tt);              // Cancel any pending hide timer
+      _tt = setTimeout(() => el.className='', 3500);  // Hide after 3.5 seconds
+  }
+
+  → Toasts are temporary notification pop-ups (bottom-right corner).
+  → clearTimeout: Prevents previous timer from hiding the new toast early.
+    Example: If you call toast() twice quickly, without clearTimeout the
+    first timer would hide the second toast prematurely.
+  → el.className = '': Removes 'show' class → CSS opacity:0 → invisible.
+  → Types change border/text color:
+    'ok' → green (success)
+    'err' → red (error)
+    'wrn' → orange (warning)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 13: JAVASCRIPT — WEBSOCKET VIDEO STREAM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const canvas = document.getElementById('videoCanvas');
+  const ctx = canvas.getContext('2d');
+    → Gets the 2D rendering context of the canvas.
+    → All drawing operations happen through 'ctx'.
+
+  let ws = null, fpsCount = 0, fpsTimer = null;
+
+  function startWS() {
+    killWS();
+      → Close any existing WebSocket before opening a new one.
+      → Prevents multiple connections accumulating (memory leak).
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      → WebSocket protocol must match HTTP protocol:
+        http:// page → use ws:// (unencrypted WebSocket)
+        https:// page → use wss:// (encrypted WebSocket, like HTTPS)
+      → Mixing protocols causes browser security errors.
+
+    ws = new WebSocket(`${proto}://${location.host}/ws/video`);
+      → location.host = current hostname + port (e.g., "192.168.1.10:5000").
+      → Template literals: backtick strings with ${...} interpolation.
+
+    ws.onopen = () => { ... }
+      → Callback when WebSocket connection is established.
+      → Sets status to LIVE, hides loading overlay, shows canvas, starts FPS counter.
+
+    ws.onmessage = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            if (canvas.width !== img.naturalWidth) canvas.width = img.naturalWidth || 854;
+            if (canvas.height !== img.naturalHeight) canvas.height = img.naturalHeight || 480;
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(img.src);
+            fpsCount++;
+        };
+        const b = atob(e.data);
+          → atob(): Decodes base64 string back to binary string.
+          → Each character's char code = one byte of the JPEG.
+        
+        const u = new Uint8Array(b.length);
+        for (let i=0; i<b.length; i++) u[i] = b.charCodeAt(i);
+          → Converts binary string to proper byte array.
+          → charCodeAt(i) gets the byte value at position i.
+        
+        img.src = URL.createObjectURL(new Blob([u], {type:'image/jpeg'}));
+          → Creates a Blob (binary data object) from byte array.
+          → URL.createObjectURL creates a temporary URL pointing to that Blob.
+          → Setting img.src triggers the browser to decode and load the JPEG.
+          → img.onload fires when decoding is complete → we draw to canvas.
+          → URL.revokeObjectURL(img.src) frees the temporary URL memory.
+    }
+
+    ws.onerror = () => { setRec('ERROR', false); showLoading(false); }
+      → Connection failed → update status indicator, hide loading overlay.
+
+    ws.onclose = () => { setRec('CLOSED', false); stopFps(); }
+      → Connection closed → update status, stop FPS counter.
+  }
+
+  function killWS() {
+      if (ws) { ws.onclose=null; ws.onerror=null; ws.onmessage=null; ws.close(); ws=null; }
+      stopFps();
+  }
+    → Sets all callbacks to null BEFORE calling ws.close().
+    → WHY? ws.close() triggers onclose event. If we didn't null it,
+      the onclose handler would run and update UI incorrectly.
+    → This pattern is called "cleanup before destruction".
+
+  function startFps() {
+      fpsCount = 0;
+      fpsTimer = setInterval(() => {
+          document.getElementById('hFps').textContent = fpsCount;
+          document.getElementById('fpsBadge').textContent = fpsCount + ' fps';
+          fpsCount = 0;
+      }, 1000);
+  }
+    → Every second: displays fpsCount (frames received this second), then resets.
+    → Simple FPS counter: count frames in a 1-second window.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 14: JAVASCRIPT — SOURCE CONTROL FUNCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  async function startWebcam() {
+      setBusy(true);
+        → Disables webcam and CCTV buttons (prevents double-clicking).
+
+      showLoading(true, 'OPENING WEBCAM...');
+        → Shows loading overlay with message.
+
+      try {
+          const r = await fetch('/webcam', {method:'POST'});
+            → fetch(): Modern HTTP request API (replaces XMLHttpRequest).
+            → await: Pauses execution until the HTTP response arrives.
+            → async function is needed to use await inside it.
+
+          const d = await r.json();
+            → Parses JSON response body. Also awaited (reading body is async).
+
+          if (d.status !== 'ok') { toast(d.message,'err'); return; }
+            → If backend returns error status, show toast and stop.
+
+          setSrc('WEBCAM', 'live');
+          startWS();
+          toast('Webcam connected', 'ok');
+
+      } catch(e) { toast('Webcam failed','err'); }
+          → catch: If fetch() throws (network error, server unreachable).
+
+      finally { setBusy(false); }
+          → finally: Runs whether try succeeded OR catch ran.
+          → Re-enables buttons regardless of outcome.
+  }
+
+  async function doUpload(input) {
+      const file = input.files[0];
+        → input.files is a FileList object. [0] = first selected file.
+
+      const fd = new FormData();
+      fd.append('video', file);
+        → FormData: Special object for sending files via HTTP.
+        → 'video' is the field name; matches request.files['video'] in Flask.
+
+      await fetch('/upload', {method:'POST', body:fd});
+        → No Content-Type header needed — browser sets it automatically
+          with correct multipart/form-data boundary string.
+
+      setTimeout(() => { startWS(); showLoading(false); }, 800);
+        → 800ms delay before starting WebSocket.
+        → Gives the backend _load_frames() thread time to read the first frames.
+        → Without delay, WS might connect before any frames are ready.
+  }
+
+  async function doStop() {
+      killWS();
+        → Close WebSocket first (UI updates immediately).
+
+      canvas.style.display = 'none';
+      document.getElementById('noSignal').style.display = 'flex';
+        → Hide video canvas, show "NO SIGNAL" placeholder.
+
+      document.getElementById('alertBanner').classList.remove('show');
+        → Hide any active alert banner.
+
+      try { await fetch('/stop', {method:'POST'}); } catch(e) {}
+        → Tell backend to stop. Empty catch: we don't care if it fails
+          (page should still update regardless).
+  }
+
+  function setBusy(v) {
+      ['btnWc','btnCctv'].forEach(id => document.getElementById(id).disabled = v);
+  }
+    → .disabled property maps to HTML disabled attribute.
+    → disabled=true → .btn:disabled CSS applies → grayed out, no interaction.
+
+  function setRec(label, live) {
+      document.getElementById('recLbl').textContent = label;
+      document.getElementById('recDot').className = 'rec-dot' + (live ? ' live' : '');
+  }
+    → Updates the recording indicator in the header.
+    → live=true adds 'live' class → red pulsing animation.
+    → Ternary operator: condition ? valueIfTrue : valueIfFalse.
+
+  function showLoading(v, txt='LOADING...') {
+      document.getElementById('loadingOverlay').classList.toggle('show', v);
+      document.getElementById('loadingTxt').textContent = txt;
+  }
+    → classList.toggle('show', v): Adds 'show' if v=true, removes if v=false.
+    → Second argument to toggle() is the force parameter — more explicit than
+      toggle() alone (which would reverse the current state).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 15: JAVASCRIPT — MODAL (CCTV CONNECTION)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  function openModal()  { document.getElementById('overlay').classList.add('open'); liveUpdateUrl(); }
+  function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+    → Adding/removing 'open' class triggers CSS transitions (fade + slide).
+    → liveUpdateUrl() immediately generates URL preview when modal opens.
+
+  ['qIp','qPort','qUser','qPass'].forEach(id =>
+      document.getElementById(id).addEventListener('input', liveUpdateUrl));
+  ['qCh','qSub'].forEach(id =>
+      document.getElementById(id).addEventListener('change', liveUpdateUrl));
+    → Attaches event listeners to all form fields.
+    → 'input' event fires on every keystroke (for text inputs).
+    → 'change' event fires when dropdown selection changes.
+    → Both call liveUpdateUrl() to regenerate the URL preview in real time.
+
+  function liveUpdateUrl() {
+      const ip   = document.getElementById('qIp').value   || '<ip>';
+      const port = ...
+      // Falls back to placeholder strings if fields are empty
+      const url = `rtsp://${user}:${pass}@${ip}:${port}/cam/realmonitor?channel=${ch}&subtype=${sub}`;
+      document.getElementById('urlPreview').textContent = url;
+  }
+    → Reads all fields, constructs Dahua RTSP URL, shows it in the preview div.
+    → || '<ip>': If field is empty string (''), use '<ip>' as placeholder.
+    → Runs on every keystroke so URL updates in real time as user types.
+
+  function copyUrlToField() {
+      const url = document.getElementById('urlPreview').textContent;
+      document.getElementById('rtspUrl').value = url;
+      toast('URL copied to field', 'ok');
+  }
+    → Copies the generated URL from the preview into the manual URL input below.
+    → This is a convenience feature — user can auto-generate URL, then manually
+      edit just one part if needed.
+
+  async function connectCCTV() {
+      const ip   = document.getElementById('qIp').value.trim();
+      ...
+
+      const payload = ip
+          ? { ip, port, username: user, password: pass, channel: ch, subtype: sub }
+          : { rtsp_url: manualUrl };
+        → Ternary: If IP field is filled → send structured fields to backend.
+          Backend builds the URL safely.
+          If IP is empty but manual URL is given → send raw URL.
+        → Shorthand property: { ip } same as { ip: ip }.
+
+      const r = await fetch('/cctv', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+      });
+        → JSON.stringify: Converts JS object to JSON string for sending.
+        → Content-Type header tells Flask to parse body as JSON
+          (required for request.get_json() to work on the backend).
+
+      if (d.status !== 'ok') { toast(d.message,'err'); return; }
+        → If FFmpeg couldn't connect, show the error message from backend.
+  }
+
+  document.getElementById('overlay').addEventListener('click', function(e){
+      if (e.target === this) closeModal();
+  });
+    → Closes modal when clicking the DARK OVERLAY (not the modal itself).
+    → e.target: The element that was actually clicked.
+    → this: The overlay div (the element the listener is on).
+    → If target === this: User clicked directly on the overlay, not a child.
+    → Clicking inside the modal card: e.target = modal content, not overlay → no close.
+    → This is the standard "click outside to close" pattern.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 16: JAVASCRIPT — DETECTION UI UPDATES (updateUI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const NON_VIO = new Set(['NonViolence','Waiting...','Analyzing...','Detecting...']);
+    → Set for fast O(1) membership testing.
+    → These labels should NOT be logged in the event log (only actual events).
+
+  let lastLabel='', logN=0;
+    → lastLabel: Tracks previous label to detect when it changes (for log entries).
+    → logN: Counts total log entries (to enforce 60-entry limit).
+
+  function updateUI(d) {
+    d = JSON object from /results endpoint:
+    { label, confidence, severity, alert, explanation, persons, source }
+
+    1. ACTIVITY LABEL SECTION:
+      document.getElementById('labelWrap').className = 'big-label-wrap sev-' + sev;
+        → Replaces entire class list. 'sev-danger', 'sev-warn', 'sev-normal', or 'sev-none'.
+        → CSS rules for .sev-danger change colors throughout the label section.
+
+      document.getElementById('labelEl').textContent = label.toUpperCase();
+        → .textContent: Safely sets text (no HTML injection risk unlike .innerHTML).
+        → .toUpperCase(): "Fighting" → "FIGHTING".
+
+      Severity badge text:
+        'danger' → '⚠ CRITICAL THREAT'
+        'warn'   → '⚠ WARNING'
+        'normal' → '✓ NORMAL'
+        else     → 'STANDBY'
+
+    2. CONFIDENCE BAR:
+      document.getElementById('confVal').textContent = conf + '%';
+        → Updates "87.5%" text next to bar.
+
+      const fill = document.getElementById('confFill');
+      fill.style.width = conf + '%';
+        → Sets bar fill width dynamically. CSS transition animates this.
+        → conf=87.5 → width:'87.5%' → bar is 87.5% full.
+
+      fill.className = 'conf-fill' + (conf>75?' hi':conf>50?' md':'');
+        → Chained ternary for multi-condition class assignment:
+          >75% → 'conf-fill hi' → red
+          >50% → 'conf-fill md' → orange
+          else → 'conf-fill'   → cyan (default)
+
+    3. STATS UPDATE:
+      statPersons: person count
+      statConf: confidence number
+      hPersons: header person count
+
+    4. AI EXPLANATION BOX:
+      expEl.textContent = d.explanation;
+        → Updates text. .textContent avoids XSS risk.
+
+      expEl.className = 'exp-area sev-' + sev;
+        → Changes styling to match severity (red/orange/green tint).
+
+      expHeader text and class updated similarly.
+
+    5. ALERT BANNER:
+      if (d.alert) {
+          banner.classList.add('show');
+          banner.className = 'show' + (sev==='warn' ? ' warn-mode' : '');
+            → If warning: adds warn-mode class for orange theme.
+            → Default (danger): keeps red theme.
+
+          document.getElementById('alertTxt').textContent =
+              (d.explanation || '').split('.')[0] || 'Immediate review recommended.';
+            → Takes only the FIRST SENTENCE of the explanation.
+            → .split('.')[0] splits on period, takes part before first period.
+      } else {
+          banner.classList.remove('show');
+      }
+
+    6. EVENT LOG:
+      if (label !== lastLabel && !NON_VIO.has(label)) {
+        → Only log when label CHANGES and it's an actual crime (not NonViolence/loading).
+
+        const row = document.createElement('div');
+          → Creates a new div element in memory (not yet in DOM).
+
+        row.className = 'log-row ' + cls;
+          → cls = 'danger', 'warn', or 'normal' based on severity.
+
+        row.innerHTML = `<span ...>${time}</span><span ...>${label}</span><span ...>${conf}%</span>`;
+          → Template literal creates HTML string with current data.
+          → innerHTML used here (not textContent) because we need HTML structure.
+          → Data values are from our own trusted source, not user input → safe here.
+
+        log.insertBefore(row, log.firstChild);
+          → Prepends new entry at the TOP of the log.
+          → insertBefore(newNode, referenceNode) inserts before reference.
+          → firstChild = currently first item → inserting before it = top.
+
+        if (++logN > 60 && log.lastChild) log.removeChild(log.lastChild);
+          → ++logN: Pre-increment (increments THEN evaluates).
+          → If count exceeds 60: remove the LAST (oldest) entry.
+          → This maintains a sliding window of 60 events.
+      }
+  }
+
+  setInterval(async () => {
+      try {
+          updateUI(await (await fetch('/results')).json());
+      } catch(e) {}
+  }, 1000);
+    → Polls the backend /results endpoint every 1000ms (1 second).
+    → Inner await: waits for HTTP response.
+    → Outer await: waits for JSON parsing.
+    → try/catch with empty catch: If backend is unreachable, silently ignore.
+      (We don't want errors flooding the console for temporary connectivity issues.)
+    → This pattern is called "polling" — regularly checking for updates.
+    → Alternative (not used here): WebSocket for results too, or Server-Sent Events.
+      Polling is simpler and sufficient for 1-second update frequency.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 17: CUSTOM SCROLLBAR STYLING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ::-webkit-scrollbar { width:3px }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px }
+    → ::-webkit-scrollbar: CSS pseudo-element for custom scrollbar styling.
+    → Only works in WebKit-based browsers (Chrome, Safari, Edge).
+    → width:3px: Very thin scrollbar (unobtrusive).
+    → -thumb: The draggable scroll indicator piece.
+    → Styled to match the dark theme.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 18: DATA FLOW SUMMARY — FRONTEND PERSPECTIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  USER CLICKS WEBCAM BUTTON
+         ↓
+  startWebcam() → POST /webcam → Flask starts camera → returns {status:'ok'}
+         ↓
+  startWS() → Opens WebSocket ws://host/ws/video
+         ↓
+  ws.onmessage fires 25x per second:
+    base64 JPEG string → atob() → Blob → Image → ctx.drawImage() → canvas shows video
+         ↓
+  setInterval (1 second):
+    fetch('/results') → Flask returns latest_result JSON
+    → updateUI() updates: label, confidence bar, alert banner, log, explanation
+
+
+  USER CLICKS STOP BUTTON
+         ↓
+  killWS() → closes WebSocket connection
+  fetch('/stop') → Flask calls _hard_stop() → kills camera, FFmpeg, clears buffers
+         ↓
+  Canvas hidden, noSignal div shown, status → STANDBY
+
+
+  USER OPENS CCTV MODAL, FILLS FORM, CLICKS CONNECT
+         ↓
+  liveUpdateUrl() → builds rtsp:// URL from fields → shows in preview
+         ↓
+  connectCCTV() → POST /cctv with {ip, port, username, password, channel, subtype}
+         ↓
+  Flask builds URL → starts FFmpeg subprocess → waits 3s → checks if FFmpeg still running
+         ↓
+  Returns {status:'ok'} → closeModal() → setSrc() → startWS() → video streams
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 19: KEY JAVASCRIPT CONCEPTS USED — QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  async/await
+    → Modern way to handle asynchronous operations (network requests, timers).
+    → await pauses the async function until the Promise resolves.
+    → Makes async code read like synchronous code (no "callback hell").
+
+  WebSocket API
+    → new WebSocket(url): Opens connection.
+    → .onopen, .onmessage, .onerror, .onclose: Event handlers.
+    → .send(data): Sends data to server.
+    → .close(): Closes connection.
+
+  fetch() API
+    → Modern HTTP request (replaces XMLHttpRequest).
+    → Returns a Promise. Usage: await fetch(url, options).
+    → Response.json() parses JSON body. Also a Promise.
+
+  classList API
+    → .add('class'): Adds CSS class.
+    → .remove('class'): Removes CSS class.
+    → .toggle('class', force): Adds or removes based on force boolean.
+    → Much safer than modifying .className string directly.
+
+  Template Literals
+    → Backtick strings: `Hello ${name}`
+    → Multi-line strings without escape characters.
+    → Expression interpolation with ${...}.
+
+  Arrow Functions
+    → () => expression or () => { statements }
+    → Shorter syntax than function() {}.
+    → Inherits 'this' from surrounding scope (important for event handlers).
+
+  Ternary Operator
+    → condition ? valueIfTrue : valueIfFalse
+    → Inline if/else for expressions.
+
+  Set data structure
+    → new Set([values])
+    → .has(value): O(1) membership test (faster than array .includes() for large sets).
+    → No duplicate values.
+
+  FormData
+    → Special object for HTTP multipart form submissions.
+    → Use with fetch() to upload files.
+    → Browser automatically sets Content-Type with boundary.
+
+  URL.createObjectURL / URL.revokeObjectURL
+    → createObjectURL: Creates temporary URL for a Blob in browser memory.
+    → revokeObjectURL: Frees that memory when done.
+    → Essential for displaying received image data without base64 encoding overhead.
+
+================================================================================
+END OF DOCUMENT 3: index.html EXPLANATION
+================================================================================

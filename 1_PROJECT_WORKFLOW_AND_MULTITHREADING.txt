@@ -1,0 +1,517 @@
+================================================================================
+       SENTINEL AI — PROJECT WORKFLOW, DATA FLOW & MULTITHREADING GUIDE
+================================================================================
+Prepared for: Team Review Preparation
+Project: Real-Time AI Surveillance System
+Files: app.py (Backend) + index.html (Frontend)
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1: WHAT THIS PROJECT DOES (BIG PICTURE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SENTINEL AI is a real-time video surveillance system that:
+
+  1. Takes video input from THREE possible sources:
+       → Webcam (live camera connected to PC)
+       → CCTV / IP Camera (via RTSP network stream)
+       → Uploaded video file (MP4 etc.)
+
+  2. Runs THREE AI models simultaneously on that video:
+       → YOLOv8  : Detects and counts PERSONS in each frame
+       → TimesFormer : Understands the ACTION happening (Fighting, Arson, etc.)
+       → LLaMA 3.1 : Generates a human-readable alert/explanation
+
+  3. Streams the annotated video (with bounding boxes and labels) to the
+     browser in real-time via WebSocket.
+
+  4. Displays detection results, confidence scores, event log, and AI alerts
+     in a live dashboard (the index.html frontend).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2: HOW DATA FLOWS THROUGH THE SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Think of it like a factory assembly line with multiple parallel workers.
+Each "worker" is a thread. Here is the complete data journey:
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 1: VIDEO SOURCE → RAW FRAMES
+──────────────────────────────────────────────────────────────────────────────
+
+  [WEBCAM]
+    User clicks WEBCAM button in browser
+    → Browser sends HTTP POST to /webcam
+    → Flask opens cv2.VideoCapture(0) (device 0 = first webcam)
+    → Sets live_mode = True
+    → capture_thread() starts reading frames from the webcam
+    → Each frame is stored in the global variable: raw_frame
+    → Also appended to pred_buf (prediction buffer, max 96 frames)
+
+  [CCTV / RTSP]
+    User enters camera IP/credentials in modal and clicks CONNECT
+    → Browser sends HTTP POST to /cctv with IP, port, username, password
+    → Backend builds RTSP URL: rtsp://user:pass@ip:port/cam/realmonitor?...
+    → Instead of OpenCV directly reading RTSP (unreliable), it launches
+      FFmpeg as a separate subprocess
+    → FFmpeg reads the RTSP stream and converts video to raw BGR pixel bytes
+    → ffmpeg_capture_thread() reads those raw bytes from FFmpeg's stdout pipe
+    → Converts bytes to numpy array → OpenCV frame
+    → Stores frame in raw_frame and pred_buf
+
+  [UPLOADED VIDEO]
+    User selects a video file, browser uploads it via HTTP POST to /upload
+    → Flask saves the file as "temp_upload.mp4"
+    → A new thread runs _load_frames() which reads ALL frames using
+      cv2.VideoCapture and stores them in the global list: video_frames
+    → live_mode = False (we already have all frames loaded in memory)
+
+DATA CHECKPOINT AFTER STEP 1:
+  → Global variable raw_frame holds the latest single frame (for live sources)
+  → Global list pred_buf holds up to 96 recent frames (for TimesFormer)
+  → Global list video_frames holds all frames of uploaded video
+
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 2: PERSON DETECTION — YOLOv8 (runs every 0.25 seconds)
+──────────────────────────────────────────────────────────────────────────────
+
+  yolo_thread() wakes up every 250ms and:
+    1. Gets the current frame (from raw_frame if live, or video_frames if upload)
+    2. Sends the frame to YOLOv8 model with image size 320
+    3. YOLOv8 returns bounding boxes for detected objects
+    4. The thread FILTERS only class 0 (which is "person" in COCO dataset)
+    5. Draws green rectangles around each person with label "Person"
+    6. Counts how many persons were detected
+    7. Reads the latest activity label (from latest_result) and draws it on frame
+       - Red banner + text if danger (Fighting, Shooting, etc.)
+       - Orange banner if warning (Burglary, Vandalism, etc.)
+       - Green text if normal
+    8. Stores the annotated frame in ann_frame (annotated frame)
+    9. Updates latest_result["persons"] with the count
+
+DATA CHECKPOINT AFTER STEP 2:
+  → ann_frame = frame with green bounding boxes + activity label drawn on it
+  → latest_result["persons"] = number of people in frame
+
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 3: ACTION RECOGNITION — TimesFormer (runs every 5 seconds)
+──────────────────────────────────────────────────────────────────────────────
+
+  predict_thread() wakes up every 5 seconds and:
+    1. Takes a snapshot of pred_buf (for live) or video_frames (for upload)
+    2. Needs exactly SEQ_LEN=16 frames for the model
+    3. Picks 16 frames evenly spaced from the buffer using step sampling
+       Formula: step = total_frames // 16
+       This ensures frames are spread across time, not just first 16 frames
+    4. Each frame is:
+       - Converted from BGR (OpenCV format) to RGB (standard image format)
+       - Resized to 224×224 pixels
+       - Converted to a PyTorch tensor (numerical array)
+    5. All 16 tensors are stacked into shape: [1, 16, 3, 224, 224]
+       Meaning: [batch=1, time=16, channels=3, height=224, width=224]
+    6. Passed to TimesFormer model which outputs a 768-dimensional vector
+    7. This vector goes through a linear classifier layer → 14 output scores
+    8. Softmax converts scores to probabilities (all sum to 1.0)
+    9. The class with highest probability = predicted activity label
+    10. Confidence = the highest probability value
+
+    The 14 possible labels are:
+      0=Abuse, 1=Arrest, 2=Arson, 3=Assault, 4=Burglary,
+      5=Explosion, 6=Fighting, 7=NonViolence, 8=RoadAccidents,
+      9=Robbery, 10=Shooting, 11=Shoplifting, 12=Stealing, 13=Vandalism
+
+    Labels are classified into severity:
+      DANGER: Abuse, Assault, Explosion, Fighting, Shooting, Arson, Robbery
+      WARN:   Arrest, Burglary, RoadAccidents, Shoplifting, Stealing, Vandalism
+      NORMAL: NonViolence
+
+    11. If label changed since last prediction → calls generate_explanation()
+        which calls the Groq API (LLaMA 3.1) to generate alert text
+    12. Updates global dict: latest_result with label, confidence, severity, alert
+
+DATA CHECKPOINT AFTER STEP 3:
+  → latest_result = {label, confidence, severity, alert, explanation, persons}
+
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 4: LLM ALERT GENERATION — LLaMA 3.1 via Groq API
+──────────────────────────────────────────────────────────────────────────────
+
+  generate_explanation() is called ONLY when the detected activity changes.
+  This avoids calling the API every 5 seconds (saves cost, reduces latency).
+
+    1. Determines severity string: "CRITICAL THREAT" or "WARNING"
+    2. Sends a prompt to Groq API:
+       System: "You are an AI surveillance alert system..."
+       User:   "Detected: Fighting | Persons: 3 | Confidence: 87% | ..."
+    3. LLaMA 3.1 8B returns a 2-sentence alert
+    4. This text is stored in latest_result["explanation"]
+
+  If label is "NonViolence", no API call is made. A hardcoded safe message
+  is used: "✓ Scene is normal. No threats detected. Monitoring continues."
+
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 5: VIDEO STREAMING TO BROWSER — WebSocket
+──────────────────────────────────────────────────────────────────────────────
+
+  The browser opens a WebSocket connection to /ws/video when any source starts.
+  The video_ws() handler runs in its own thread per connection.
+
+    1. Gets the latest annotated frame (ann_frame) or raw frame as fallback
+    2. If frame is wider than 854px, resizes it to 854px (bandwidth saving)
+    3. Encodes frame as JPEG at 72% quality (smaller file size)
+    4. Base64 encodes the JPEG bytes (converts binary to text for WebSocket)
+    5. Sends the base64 string to browser
+    6. Browser decodes it, creates an Image object, draws on HTML canvas
+    7. Waits to match target FPS (25fps for live, video's native fps for upload)
+
+  The source_id variable is a version counter. When source changes, source_id
+  increments. Each WebSocket handler checks its own copy of source_id. If the
+  global source_id changed, the handler exits its loop → disconnects cleanly.
+
+
+──────────────────────────────────────────────────────────────────────────────
+STEP 6: RESULTS POLLING — HTTP REST
+──────────────────────────────────────────────────────────────────────────────
+
+  Separately from video, the browser polls /results every 1 second.
+  The frontend JavaScript does:
+    fetch('/results') → gets JSON of latest_result
+    → updates the sidebar: label, confidence bar, person count, explanation
+    → updates the alert banner at bottom of video
+    → adds an entry to the event log if label changed
+
+
+──────────────────────────────────────────────────────────────────────────────
+FULL DATA FLOW DIAGRAM
+──────────────────────────────────────────────────────────────────────────────
+
+  [WEBCAM / CCTV / VIDEO FILE]
+            │
+            ▼
+  ┌─────────────────────┐    ┌─────────────────────────────┐
+  │  capture_thread()   │    │  ffmpeg_capture_thread()    │
+  │  (OpenCV webcam/    │    │  (RTSP via FFmpeg pipe)     │
+  │   video frames)     │    └──────────────┬──────────────┘
+  └──────────┬──────────┘                   │
+             │                              │
+             └──────────────┬───────────────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │   raw_frame   │  (latest single frame)
+                    │   pred_buf    │  (ring buffer, 96 frames)
+                    └───────┬───────┘
+                            │
+               ┌────────────┼─────────────┐
+               │            │             │
+               ▼            ▼             ▼
+        ┌──────────┐  ┌──────────┐  ┌──────────────┐
+        │ YOLO     │  │ Times-   │  │ video_ws()   │
+        │ Thread   │  │ Former   │  │ WS Sender    │
+        │ (0.25s)  │  │ Thread   │  │ (25 fps)     │
+        └────┬─────┘  │ (5s)     │  └──────┬───────┘
+             │        └────┬─────┘         │
+             │             │               │
+             ▼             ▼               ▼
+        ann_frame    latest_result    [Browser Canvas]
+        (annotated)  {label,conf,     displays video
+                      severity,
+                      persons,
+                      explanation}
+                            │
+                            ▼
+                    Browser polls /results
+                    every 1 second →
+                    Updates sidebar UI
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3: WHY MULTITHREADING? THE CORE CONCEPT EXPLAINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEM WITHOUT MULTITHREADING:
+  If we ran everything sequentially (one after another) in a single thread:
+
+    Read Frame → Run YOLO → Run TimesFormer → Call LLaMA → Send to browser
+                                                            → Repeat
+
+  TimesFormer on CPU takes ~3-5 seconds per prediction.
+  YOLO takes ~100ms per frame.
+  LLaMA API call takes ~1-2 seconds.
+
+  This means the browser would freeze for 5+ seconds between frame updates.
+  The video would be extremely choppy — unusable for surveillance.
+
+SOLUTION WITH MULTITHREADING:
+  Each task runs in its own independent thread (parallel worker).
+  They share data through global variables protected by Locks.
+  
+  This is like a real surveillance control room:
+    - One person (thread) watches the camera feed continuously
+    - Another person (thread) checks for suspicious activity periodically
+    - Another person (thread) is on the phone with police when needed
+    - All three work at the same time, not waiting for each other
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4: EACH THREAD — PURPOSE, TIMING, AND WHAT IT DOES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THREAD 1: capture_thread()                                                  │
+│ Started at: app startup (daemon=True)                                       │
+│ Timing: runs as fast as possible (no sleep, limited by camera FPS)          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHAT IT DOES:                                                               │
+│   - Reads frames from OpenCV VideoCapture (webcam or uploaded video)        │
+│   - Only runs when live_mode = True AND stop_event is not set               │
+│   - Writes each new frame into raw_frame (shared global)                    │
+│   - Also appends to pred_buf (up to 96 frames rolling buffer)               │
+│   - If pred_buf > 96 frames, deletes the oldest frame                       │
+│                                                                             │
+│ WHY SEPARATE THREAD:                                                        │
+│   Camera reading must be continuous. If we paused it to run AI models,     │
+│   the camera buffer would fill up and old frames would be dropped.          │
+│   Keeping it separate ensures we always have the freshest frame ready.      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THREAD 2: ffmpeg_capture_thread()                                           │
+│ Started at: app startup (daemon=True)                                       │
+│ Timing: blocks on stdout.read() — runs as fast as FFmpeg produces frames   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHAT IT DOES:                                                               │
+│   - Used ONLY for CCTV/RTSP sources                                         │
+│   - Reads raw BGR bytes from FFmpeg subprocess stdout pipe                  │
+│   - FRAME_BYTES = width × height × 3 (3 bytes per pixel: B, G, R)          │
+│   - Converts the bytes to a NumPy array and reshapes to (H, W, 3)          │
+│   - Calls .copy() to make the array writable (NumPy buffers are read-only) │
+│   - Writes to raw_frame and pred_buf (same as capture_thread)               │
+│                                                                             │
+│ WHY FFmpeg INSTEAD OF OpenCV FOR RTSP:                                      │
+│   OpenCV's RTSP support has bugs with special characters in passwords.      │
+│   FFmpeg is more robust. FFmpeg is launched as a subprocess and its         │
+│   output is piped as raw video bytes to our Python code.                    │
+│                                                                             │
+│ WHY SEPARATE THREAD:                                                        │
+│   proc.stdout.read(FRAME_BYTES) is a BLOCKING call — it waits until        │
+│   exactly FRAME_BYTES bytes arrive from FFmpeg.                             │
+│   If this were in the main thread, the entire app would freeze waiting.     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THREAD 3: yolo_thread()                                                     │
+│ Started at: app startup (daemon=True)                                       │
+│ Timing: time.sleep(0.25) — runs 4 times per second                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHAT IT DOES:                                                               │
+│   - Gets the current frame (raw or from video_frames for upload)            │
+│   - Runs YOLOv8 on it (image size 320 for speed)                           │
+│   - Filters boxes where class ID == 0 (person)                              │
+│   - Draws bounding box rectangles in green on the frame                     │
+│   - Writes "Person" label above each box                                    │
+│   - Reads latest activity label from latest_result and draws it on frame   │
+│   - Applies colored banner overlay for danger/warning situations            │
+│   - Updates latest_result["persons"] with count                             │
+│   - Saves the annotated frame to ann_frame                                  │
+│                                                                             │
+│ WHY 0.25 SECOND INTERVAL:                                                   │
+│   YOLO is fast (~100ms) but running it every frame (25fps) wastes CPU.     │
+│   Person count doesn't change dramatically frame-to-frame.                  │
+│   4 times/second is sufficient for accurate person tracking.                │
+│                                                                             │
+│ WHY SEPARATE THREAD:                                                        │
+│   YOLO inference takes ~100ms. If done in the video sender thread,          │
+│   frame rate would drop from 25fps to ~10fps. Running separately means      │
+│   the WS sender can send the LAST annotated frame while YOLO is busy       │
+│   processing the next one.                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THREAD 4: predict_thread()                                                  │
+│ Started at: app startup (daemon=True)                                       │
+│ Timing: time.sleep(5) — runs every 5 seconds                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHAT IT DOES:                                                               │
+│   - Samples 16 frames evenly from pred_buf or video_frames                 │
+│   - Preprocesses: BGR→RGB, resize 224×224, normalize, stack to tensor       │
+│   - Runs TimesFormer forward pass → 768-dim embedding                       │
+│   - Passes through linear classifier → 14 class logits                     │
+│   - Applies softmax → probability distribution                              │
+│   - Gets argmax = predicted class index                                     │
+│   - Maps index to label name using id_to_label dict                        │
+│   - Determines severity (danger/warn/normal)                                │
+│   - If label changed: calls generate_explanation() for LLM alert           │
+│   - Updates latest_result dict                                              │
+│                                                                             │
+│ WHY 5 SECOND INTERVAL:                                                      │
+│   TimesFormer on CPU takes 3-10 seconds per inference pass.                 │
+│   Activities don't change every second — surveillance scenes evolve slowly.  │
+│   5 seconds gives enough time for the model to finish AND for the scene     │
+│   to accumulate meaningful changes.                                          │
+│                                                                             │
+│ WHY SEPARATE THREAD:                                                        │
+│   This is the HEAVIEST computation in the system. Running it in the main   │
+│   thread or the video sender would stall the entire application for 5+     │
+│   seconds on each prediction cycle. Isolating it means video streams       │
+│   smoothly at 25fps while TimesFormer works quietly in the background.     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THREAD 5: video_ws() — WebSocket handler (one per browser connection)       │
+│ Started at: when browser opens WebSocket connection                         │
+│ Timing: controlled by fps_target (25fps live, video's native fps upload)   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHAT IT DOES:                                                               │
+│   - Checks source_id to know if it should still be running                 │
+│   - Gets ann_frame (annotated) or falls back to raw_frame                  │
+│   - Resizes frame if wider than 854px                                       │
+│   - JPEG encodes at 72% quality                                             │
+│   - Base64 encodes the JPEG bytes                                           │
+│   - Sends base64 string over WebSocket to browser                           │
+│   - Calculates remaining sleep time to hit target FPS                       │
+│                                                                             │
+│ WHY SEPARATE THREAD:                                                        │
+│   Flask-Sock creates a new thread for each WebSocket connection.            │
+│   This thread can block on ws.send() without freezing other operations.    │
+│   The FPS-pacing sleep() happens here without affecting AI threads.         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5: THREAD SAFETY — LOCKS EXPLAINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEM: Multiple threads reading and writing the same variable at the same
+time can cause RACE CONDITIONS — corrupted data or crashes.
+
+Example of a race condition:
+  Thread A is halfway through writing a frame to raw_frame.
+  Thread B reads raw_frame at the same moment.
+  Thread B gets a half-written, corrupted frame → crash or glitch.
+
+SOLUTION: threading.Lock() — only ONE thread can hold the lock at a time.
+Others wait until it's released.
+
+  The code uses "with lock_name:" which automatically:
+    1. Acquires the lock (waits if another thread has it)
+    2. Runs the code inside the with block
+    3. Releases the lock when done (even if an exception occurs)
+
+LOCKS IN THIS PROJECT:
+
+  raw_frame_lock   → Protects raw_frame variable
+  ann_frame_lock   → Protects ann_frame variable
+  pred_buf_lock    → Protects pred_buf list
+  cap_lock         → Protects the OpenCV VideoCapture object (cap)
+  vid_idx_lock     → Protects vid_idx (current frame index for video playback)
+  ffmpeg_lock      → Protects ffmpeg_proc (the FFmpeg subprocess handle)
+  source_id_lock   → Protects source_id counter
+  switch_lock      → Master lock for switching sources (prevents race between
+                     two users clicking different sources simultaneously)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6: STOP EVENT — GRACEFUL COORDINATION BETWEEN THREADS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+stop_event is a threading.Event() object.
+It acts like a flag that all threads can see at the same time.
+
+  stop_event.set()   → Sets the flag to True (signals all threads to pause)
+  stop_event.clear() → Resets flag to False (threads resume operation)
+  stop_event.is_set() → Returns True/False (threads check this to decide)
+
+When user switches sources or clicks STOP:
+  1. _hard_stop() is called
+  2. stop_event.set() → All threads see is_set()=True and pause their loops
+  3. source_id increments → WebSocket senders see their copy is stale → exit
+  4. OpenCV capture is released, FFmpeg is killed, buffers are cleared
+  5. stop_event.clear() → Threads are ready to resume for the new source
+
+  This ensures clean switching without memory leaks or zombie threads.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7: DAEMON THREADS — WHY daemon=True?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All background threads are started with daemon=True:
+  threading.Thread(target=capture_thread, daemon=True).start()
+
+WHAT THIS MEANS:
+  A daemon thread is a "background worker" thread.
+  When the MAIN thread (Flask server) exits, all daemon threads are
+  automatically killed immediately — no waiting, no hanging.
+
+WITHOUT daemon=True:
+  If the user presses Ctrl+C to stop the Flask server, Python would wait
+  for all threads to finish on their own. Since our threads run infinite
+  loops (while True:), the program would NEVER exit. The user would have
+  to force-kill the process.
+
+WITH daemon=True:
+  When Flask server exits → Python kills all daemon threads instantly → 
+  Clean, immediate shutdown.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8: MODEL LOADING — WHY DONE AT STARTUP?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Both models (YOLOv8 and TimesFormer) are loaded ONCE when app.py starts,
+BEFORE the Flask server begins accepting requests.
+
+  yolo_model = YOLO("yolov8n.pt")
+  ts_model = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
+
+WHY NOT LOAD ON DEMAND?
+  Loading a deep learning model takes 5-30 seconds.
+  If we loaded it when the first user connects, they'd get a 30-second delay.
+  By loading at startup, models are always ready in GPU/CPU memory.
+  Every prediction request just uses the pre-loaded model instantly.
+
+ts_model.eval() — sets model to evaluation mode (disables dropout and
+  batch normalization training behavior). This is ALWAYS required for inference.
+
+torch.no_grad() — used during prediction to tell PyTorch not to compute
+  gradients. Gradients are only needed during training. Disabling them saves
+  memory and speeds up inference by ~2x.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9: COMMUNICATION PROTOCOLS SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  HTTP REST (Flask routes):
+    POST /webcam     → Start webcam stream
+    POST /cctv       → Connect to CCTV/RTSP camera
+    POST /upload     → Upload video file
+    POST /stop       → Stop all streams
+    GET  /results    → Get latest detection results (JSON)
+    GET  /           → Serve the HTML dashboard
+
+  WebSocket (Flask-Sock):
+    ws://host/ws/video → Continuous binary video frame stream
+    Browser connects once; server keeps sending frames indefinitely
+    Frames sent as base64-encoded JPEG strings
+
+  FFmpeg Subprocess (Internal):
+    Not a network protocol — FFmpeg runs locally
+    Python reads its stdout pipe as raw bytes
+    This is an Inter-Process Communication (IPC) mechanism
+
+  Groq API (External HTTP):
+    groq_client.chat.completions.create() → HTTPS call to Groq's servers
+    Returns LLaMA 3.1 generated text
+    Called asynchronously inside predict_thread
+
+================================================================================
+END OF DOCUMENT 1: PROJECT WORKFLOW AND MULTITHREADING
+================================================================================

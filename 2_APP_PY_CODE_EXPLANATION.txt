@@ -1,0 +1,850 @@
+================================================================================
+           SENTINEL AI — app.py COMPLETE CODE EXPLANATION
+================================================================================
+Every section, every function, every key line explained clearly.
+Use this to answer any question about the backend during your review.
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: IMPORTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  import os
+    → Built-in Python module. Used to read environment variables
+      (os.environ.get("GROQ_API_KEY")) — keeps secret keys out of code.
+
+  from flask import Flask, render_template, request, jsonify
+    → Flask: The web framework that creates the HTTP server.
+    → render_template: Renders HTML files from the /templates folder.
+    → request: Gives access to data sent by the browser (POST body, files).
+    → jsonify: Converts Python dicts to JSON HTTP responses.
+
+  from flask_sock import Sock
+    → Flask extension for WebSocket support.
+    → WebSocket = persistent two-way connection (unlike HTTP which is
+      request-response and closes). Needed for real-time video streaming.
+
+  import cv2
+    → OpenCV library. Handles all video operations:
+      reading camera frames, resizing, drawing boxes, JPEG encoding.
+
+  import torch
+    → PyTorch deep learning framework. Manages tensors (multi-dimensional
+      arrays), GPU operations, and model inference.
+
+  from ultralytics import YOLO
+    → Official Ultralytics library for YOLOv8 model.
+    → Provides YOLO() class that handles model loading, prediction, and
+      result parsing in one simple API.
+
+  from torchvision import transforms
+    → PyTorch's image transformation toolkit.
+    → Used to resize, normalize, and convert frames to tensors.
+
+  from transformers import TimesformerModel
+    → Hugging Face Transformers library.
+    → TimesformerModel: Facebook's video understanding model pre-trained
+      on Kinetics-400 (a large video dataset with 400 action classes).
+
+  import torch.nn as nn
+    → PyTorch's Neural Network module.
+    → nn.Linear: A fully connected (dense) layer used as the classifier
+      head added on top of TimesFormer.
+
+  import torch.nn.functional as F
+    → PyTorch functional operations (stateless, no learnable parameters).
+    → F.softmax: Converts raw model output scores to probabilities.
+
+  import time
+    → Built-in Python module for time.sleep() (pausing threads) and
+      time.time() (getting current timestamp for FPS calculation).
+
+  import threading
+    → Built-in Python module for creating threads, Locks, and Events.
+    → threading.Thread: Creates background worker threads.
+    → threading.Lock: Prevents race conditions on shared data.
+    → threading.Event: Acts as a flag to signal threads.
+
+  import base64
+    → Encodes binary data (JPEG bytes) to ASCII text.
+    → Required because WebSocket sends text; image bytes need encoding.
+
+  from groq import Groq
+    → Official Groq Python SDK.
+    → Groq is an AI inference platform. We use it to run LLaMA 3.1 8B
+      for generating human-readable alert text.
+
+  import subprocess
+    → Allows Python to launch external programs (FFmpeg) as subprocesses.
+    → subprocess.Popen: Starts FFmpeg and gives us access to its output.
+
+  import numpy as np
+    → NumPy: numerical computing library.
+    → Used to convert raw byte arrays from FFmpeg into frame matrices
+      that OpenCV can work with.
+
+  from dotenv import load_dotenv
+    → Reads a .env file and loads key=value pairs as environment variables.
+    → .env file stores GROQ_API_KEY without hardcoding it in source code.
+
+  load_dotenv()
+    → Must be called before os.environ.get() for .env values to be visible.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: CONFIGURATION CONSTANTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SEQ_LEN = 16
+    → TimesFormer requires exactly 16 frames as input (its temporal window).
+    → This is fixed by the model architecture — cannot be changed without
+      retraining.
+
+  DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    → Checks if an NVIDIA GPU (CUDA) is available.
+    → If yes: runs AI models on GPU (much faster — 10-50x speedup).
+    → If no: runs on CPU (slower but still works).
+    → torch.cuda.is_available() returns True only if CUDA drivers and
+      a compatible GPU are present.
+
+  TARGET_FPS = 25
+    → Target frame rate for the video stream to the browser.
+    → 25fps is standard PAL video rate. Smooth enough for surveillance.
+
+  FRAME_INTERVAL = 1.0 / TARGET_FPS  (= 0.04 seconds)
+    → Time in seconds between consecutive frames at TARGET_FPS.
+    → Used to calculate sleep time so video runs at correct speed.
+
+  YOLO_INTERVAL = 0.25
+    → YOLO runs every 250 milliseconds (4 times per second).
+    → Balance between accuracy (frequent updates) and CPU usage.
+
+  app = Flask(__name__)
+    → Creates the Flask web application instance.
+    → __name__ = the Python module name ("app" when run directly).
+    → Flask uses this to locate templates/ and static/ folders.
+
+  sock = Sock(app)
+    → Wraps the Flask app with WebSocket support.
+    → @sock.route('/ws/video') decorator registers WebSocket endpoints.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: MODEL LOADING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  yolo_model = YOLO("yolov8n.pt")
+    → Loads YOLOv8 Nano model from a local file.
+    → "n" = nano (smallest, fastest variant of YOLOv8).
+    → Pre-trained on COCO dataset (80 object classes including person).
+    → The .pt file is a PyTorch checkpoint containing weights.
+
+  ts_model = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
+    → Downloads and loads Facebook's TimesFormer base model.
+    → Pre-trained on Kinetics-400 (large video action dataset).
+    → "finetuned-k400" = already trained to recognize 400 action classes.
+    → We then replace the output head to recognize OUR 14 crime categories.
+
+  ts_model.classifier = nn.Linear(ts_model.config.hidden_size, 14)
+    → Replaces the original 400-class output head with a new 14-class head.
+    → nn.Linear(in_features, out_features): A single linear transformation layer.
+    → ts_model.config.hidden_size = 768 (the embedding dimension of this model).
+    → Output: 14 scores, one per crime category.
+    → This is called "Transfer Learning with Fine-tuning" — we keep the
+      pre-trained body and only change the final layer.
+
+  ts_model.load_state_dict(
+      torch.load("timesformer_epoch_1.pth", map_location=DEVICE), strict=False)
+    → Loads our custom trained weights from the .pth file.
+    → These weights were saved after training on our crime video dataset.
+    → map_location=DEVICE: If weights were saved on GPU but we're on CPU,
+      this remaps them correctly.
+    → strict=False: Allows partial weight loading. Some layer names may not
+      match (e.g., the new classifier head won't match original weights),
+      and strict=False says "load what matches, skip the rest" instead of crashing.
+
+  ts_model = ts_model.to(DEVICE)
+    → Moves the model's weights/parameters to GPU memory (if DEVICE="cuda")
+      or keeps on CPU RAM.
+    → All input tensors passed to this model must also be .to(DEVICE).
+
+  ts_model.eval()
+    → Sets model to evaluation mode.
+    → Disables: Dropout layers (which randomly zero out neurons during training)
+    → Disables: BatchNorm training statistics (uses running statistics instead)
+    → Without .eval(), predictions would be non-deterministic and less accurate.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: LABEL DEFINITIONS AND SEVERITY CLASSIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  id_to_label = {0:'Abuse', 1:'Arrest', ..., 13:'Vandalism'}
+    → Maps the integer output of the classifier to a human-readable label.
+    → These 14 classes are the categories in the UCF-Crime dataset used
+      for training.
+    → torch.argmax(probs) returns an integer → look up this dict → get label.
+
+  DANGER_LABELS = {'Abuse','Assault','Explosion','Fighting','Shooting','Arson','Robbery'}
+    → Python set (faster lookup than list for membership testing).
+    → These are activities with immediate physical danger.
+    → "if label in DANGER_LABELS" uses O(1) set lookup.
+
+  WARN_LABELS = {'Arrest','Burglary','RoadAccidents','Shoplifting','Stealing','Vandalism'}
+    → Activities that are serious crimes but not immediately life-threatening.
+    → Any label not in DANGER_LABELS or WARN_LABELS is treated as normal.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: generate_explanation() — LLM ALERT GENERATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  def generate_explanation(label, conf, persons):
+    Parameters:
+      label   = detected activity name (e.g., "Fighting")
+      conf    = confidence value 0.0 to 1.0 (e.g., 0.87 = 87%)
+      persons = number of people detected by YOLO
+
+    severity = "CRITICAL THREAT" if label in DANGER_LABELS else "WARNING"
+      → Chooses severity string for the prompt.
+
+    groq_client.chat.completions.create(...)
+      → Calls the Groq API with:
+        model: "llama-3.1-8b-instant" — fast, small LLaMA 3.1 model
+        messages: standard OpenAI-compatible chat format:
+          system: sets the AI's role/behavior
+          user: the actual input with detection data
+        max_tokens: 80 — limits response to ~2 sentences (keeps it concise)
+        temperature: 0.2 — low randomness (deterministic, factual responses)
+          Temperature 0.0 = always same output
+          Temperature 1.0 = very random/creative
+          0.2 = mostly consistent but slight variation
+
+    r.choices[0].message.content.strip()
+      → API returns a list of "choices" (we only request 1).
+      → .message.content is the text response.
+      → .strip() removes leading/trailing whitespace.
+
+    except Exception as e: return fallback string
+      → If API call fails (network error, rate limit, bad key),
+        returns a hardcoded fallback message so the UI still shows something.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: TRANSFORM PIPELINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  transform = transforms.Compose([
+      transforms.ToPILImage(),     → Converts NumPy array to PIL Image object
+      transforms.Resize((224,224)),→ Resizes to 224×224 (TimesFormer's input size)
+      transforms.ToTensor()        → Converts PIL Image to PyTorch tensor,
+                                     also normalizes pixel values from [0,255]
+                                     to [0.0, 1.0] automatically
+  ])
+
+  transforms.Compose([...]) chains these transformations sequentially.
+  Each frame from the video passes through ALL three steps in order.
+
+  WHY 224×224?
+    → TimesFormer was pre-trained with 224×224 input. Using different sizes
+      would require architectural changes or retraining.
+
+  WHY ToPILImage FIRST?
+    → OpenCV frames are NumPy arrays in BGR format.
+    → transforms.Resize expects PIL Image objects.
+    → PIL Images are in RGB format (PyTorch/torchvision convention).
+    → Note: we convert BGR→RGB BEFORE calling transform (in predict_thread),
+      so ToPILImage just wraps the NumPy array into PIL format.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: GLOBAL STATE VARIABLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  stop_event = threading.Event()
+    → A flag that all threads watch.
+    → Set (True) = threads pause their main logic.
+    → Clear (False) = threads operate normally.
+
+  switch_lock = threading.Lock()
+    → A master mutex used when switching video sources.
+    → Prevents two simultaneous switch operations from corrupting state.
+
+  source_id = 0
+  source_id_lock = threading.Lock()
+    → An integer version counter for the current source.
+    → Each new source increments this number.
+    → WebSocket handlers store their starting source_id and exit when
+      global source_id no longer matches theirs.
+
+  raw_frame = None
+  raw_frame_lock = threading.Lock()
+    → The LATEST raw (unannotated) frame from the camera or FFmpeg.
+    → None when no source is active.
+    → Updated by capture_thread or ffmpeg_capture_thread.
+    → Read by yolo_thread and video_ws as fallback.
+
+  ann_frame = None
+  ann_frame_lock = threading.Lock()
+    → The LATEST annotated frame (with bounding boxes and labels drawn).
+    → None until yolo_thread processes the first frame.
+    → Written by yolo_thread.
+    → Read by video_ws to send to browser.
+
+  pred_buf = []
+  pred_buf_lock = threading.Lock()
+    → Rolling buffer of recent raw frames for TimesFormer.
+    → Maximum size 96 (about 4 seconds at 25fps — enough temporal context).
+    → When full, oldest frame is deleted: del pred_buf[0].
+
+  video_frames = []
+    → Holds ALL frames of an uploaded video file in memory.
+    → No lock needed — it's written once in _load_frames() before threads
+      read it (so no concurrent write/read race condition here).
+
+  vid_fps = 25.0
+    → Playback frame rate for uploaded video (detected from the file).
+
+  vid_idx = 0
+  vid_idx_lock = threading.Lock()
+    → Current playback position index into video_frames list.
+    → Incremented by video_ws on each frame sent.
+    → Wraps around to 0 when it reaches end (loops the video).
+
+  cap = None
+  cap_lock = threading.Lock()
+    → The OpenCV VideoCapture object (webcam handle).
+    → None when webcam is not active.
+
+  live_mode = False
+    → True when reading from live camera (webcam or RTSP).
+    → False when playing uploaded video.
+    → Controls which code path capture_thread and other threads use.
+
+  latest_result = {...}
+    → Shared dictionary holding the current detection state.
+    → Read by the /results route every second.
+    → Updated by predict_thread (label, confidence, severity, explanation)
+      and yolo_thread (persons count).
+    → Note: No explicit lock on this dict because:
+      - Python dicts are protected by the GIL (Global Interpreter Lock) for
+        atomic reads/writes of single keys.
+      - We use it as a "last known value" cache — slight staleness is acceptable.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: capture_thread() — WEBCAM / VIDEO FRAME READER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  def capture_thread():
+    global raw_frame, live_mode
+      → Declares these as global so we can modify them (not just read).
+
+    while True:
+      → Infinite loop — this thread runs forever until the app exits.
+
+      if stop_event.is_set() or not live_mode:
+          time.sleep(0.02)
+          continue
+        → If stopped or in video mode, wait 20ms and loop again.
+        → continue skips all code below and goes back to while True.
+
+      with cap_lock:
+          local_cap = cap
+        → Gets a local reference to cap under the lock.
+        → Releasing lock before using local_cap is safe because we only
+          READ through local_cap — we don't modify it.
+        → Keeps lock held for minimum time (best practice).
+
+      if local_cap is None or not local_cap.isOpened():
+          time.sleep(0.05)
+          continue
+        → Safety check: if cap was released between our lock release and here.
+
+      ok, frame = local_cap.read()
+        → Reads one frame from the camera.
+        → Returns (True, frame) on success, (False, None) on failure.
+        → Blocking call — waits until camera delivers a frame.
+
+      if not ok:
+          time.sleep(0.02)
+          continue
+        → Skip failed reads (camera hiccup, end of buffer, etc.).
+
+      with raw_frame_lock:
+          raw_frame = frame
+        → Atomically updates raw_frame.
+        → Lock ensures yolo_thread doesn't read a half-written frame.
+
+      with pred_buf_lock:
+          pred_buf.append(frame)
+          if len(pred_buf) > 96:
+              del pred_buf[0]
+        → Adds frame to buffer.
+        → del pred_buf[0] removes the oldest frame (index 0 = oldest).
+        → This maintains the rolling window of recent frames.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: yolo_thread() — PERSON DETECTION AND FRAME ANNOTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  def yolo_thread():
+    global ann_frame
+
+    while True:
+      time.sleep(YOLO_INTERVAL)  → Sleep 250ms before each detection cycle.
+
+      Gets the current frame:
+        → If live_mode: reads raw_frame (must copy it — .copy() prevents
+          yolo_thread from modifying the same array that capture_thread
+          might be writing to simultaneously).
+        → If not live_mode (uploaded video): reads from video_frames[vid_idx].
+
+      res = yolo_model.predict(frame, imgsz=320, verbose=False)[0]
+        → Runs YOLOv8 inference on the frame.
+        → imgsz=320: Input size for YOLO. Smaller = faster, less accurate.
+          320 gives good speed/accuracy for real-time surveillance.
+        → verbose=False: Suppresses YOLO's progress output in terminal.
+        → Returns a list of Results objects; [0] gets results for our single frame.
+
+      for box in res.boxes:
+        → Iterates over all detected bounding boxes.
+
+        if int(box.cls[0]) == 0:
+          → box.cls[0] is the class index of detected object.
+          → Class 0 in COCO dataset = "person".
+          → We only want person detections, ignore cars, bags, animals, etc.
+
+          count += 1
+          x1,y1,x2,y2 = map(int, box.xyxy[0])
+            → box.xyxy[0] gives bounding box in [x_min, y_min, x_max, y_max] format.
+            → map(int, ...) converts float coordinates to integers for drawing.
+
+          cv2.rectangle(frame,(x1,y1),(x2,y2),(0,255,128),2)
+            → Draws a rectangle on the frame.
+            → (0,255,128) = BGR color (OpenCV uses BGR, not RGB) — this is green.
+            → 2 = line thickness in pixels.
+
+          cv2.putText(frame,"Person",(x1,max(y1-6,0)), ...)
+            → Draws "Person" text just above the bounding box.
+            → max(y1-6, 0) prevents negative y coordinate (off-screen).
+
+      Drawing the activity label overlay:
+        → Reads label, conf, sev from latest_result (written by predict_thread).
+        → If danger: creates a semi-transparent red banner at top of frame.
+          overlay = frame.copy()  → copy frame
+          cv2.rectangle on overlay → draw solid colored rectangle
+          cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+            → Blends overlay (45%) with original frame (55%) = semi-transparent.
+        → cv2.putText writes the activity label in the appropriate color.
+
+      latest_result["persons"] = count
+        → Updates person count in the shared result dict.
+
+      with ann_frame_lock:
+          ann_frame = frame
+        → Stores the fully annotated frame for the WebSocket sender.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 10: video_ws() — WEBSOCKET VIDEO SENDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  @sock.route('/ws/video')
+  def video_ws(ws):
+    → Decorator registers this function as WebSocket handler for /ws/video.
+    → 'ws' parameter is the WebSocket connection object.
+    → Each browser connection gets its own call of this function in its own thread.
+
+    with source_id_lock:
+        my_sid = source_id
+      → Captures the current source ID at connection time.
+      → This thread will exit when global source_id changes (new source selected).
+
+    while True:
+      with source_id_lock:
+          if source_id != my_sid:
+              break
+        → Every loop: check if source changed. If yes, exit → closes WebSocket.
+        → This is how old WebSocket connections are cleanly terminated when
+          the user switches from webcam to RTSP for example.
+
+      Frame selection logic:
+        → live_mode=True: use ann_frame (annotated) or fall back to raw_frame.
+        → live_mode=False (uploaded video):
+            - Increment vid_idx to advance playback position.
+            - Modulo wraps: vid_idx = (vid_idx + 1) % len(video_frames)
+            - Use ann_frame if available (YOLO may not have processed this frame yet).
+
+      if w > 854:
+          frame = cv2.resize(frame, (854, int(h*854/w)), interpolation=cv2.INTER_LINEAR)
+        → Caps width at 854 pixels (approximately 480p landscape).
+        → Maintains aspect ratio: new_height = original_height * (854 / original_width).
+        → cv2.INTER_LINEAR = bilinear interpolation (good quality, fast).
+        → Reduces bandwidth from ~1.5Mbps to ~0.4Mbps.
+
+      ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 72])
+        → Encodes frame as JPEG byte array.
+        → cv2.IMWRITE_JPEG_QUALITY, 72 = 72% quality (good balance of size/quality).
+          Quality 100 = lossless JPEG, large files.
+          Quality 72 ≈ indistinguishable to human eye but ~3x smaller.
+        → Returns (success_bool, byte_array).
+
+      ws.send(base64.b64encode(buf).decode())
+        → base64.b64encode(buf): Converts JPEG bytes to base64 ASCII string.
+        → .decode(): Converts bytes to Python str (required by ws.send()).
+        → Sends to browser. Browser will decode it back to image bytes.
+
+      FPS pacing:
+        fps_target = TARGET_FPS if live_mode else vid_fps
+        elapsed = time.time() - t0
+        wait = (1.0 / max(fps_target, 1)) - elapsed
+        if wait > 0:
+            time.sleep(wait)
+        → Calculates remaining time budget for this frame.
+        → If encoding/sending took less than frame interval, sleep the difference.
+        → This ensures video plays at correct speed (not too fast, not too slow).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 11: predict_thread() — TIMESFORMER ACTION RECOGNITION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  def predict_thread():
+    last_label = None
+      → Tracks the previously detected label.
+      → LLaMA explanation is only regenerated when label CHANGES.
+      → Saves API calls and prevents repeated identical alerts.
+
+    while True:
+      time.sleep(5)
+        → Runs every 5 seconds. TimesFormer inference is slow.
+
+      snap = list(pred_buf) if live_mode else list(video_frames)
+        → list() creates a COPY of the buffer.
+        → Important: without copy, pred_buf could be modified by
+          capture_thread while we're iterating — would cause inconsistency.
+
+      if len(snap) < SEQ_LEN:
+          continue
+        → Need at least 16 frames to run TimesFormer.
+        → Skips if stream just started and buffer isn't filled yet.
+
+      step = max(1, len(snap) // SEQ_LEN)
+        → Determines how many frames to skip between samples.
+        → Example: 96 frames in buffer, SEQ_LEN=16: step = 96//16 = 6.
+          → Take every 6th frame → 16 evenly spread frames.
+        → max(1, ...) prevents step=0 if buffer has fewer than 16 frames.
+
+      for i in range(0, len(snap), step):
+          rgb = cv2.cvtColor(snap[i], cv2.COLOR_BGR2RGB)
+          seq.append(transform(rgb))
+          if len(seq) == SEQ_LEN: break
+        → Iterates with step intervals.
+        → cv2.COLOR_BGR2RGB: OpenCV stores as BGR; PyTorch expects RGB.
+        → transform(rgb) applies resize (224×224) and tensor conversion.
+        → Stops when we have exactly 16 frames.
+
+      t = torch.stack(seq).unsqueeze(0).to(DEVICE)
+        → torch.stack(seq): Combines list of 16 tensors [3,224,224] into
+          one tensor of shape [16, 3, 224, 224].
+        → .unsqueeze(0): Adds batch dimension → [1, 16, 3, 224, 224].
+          (1 = batch size, 16 = frames, 3 = RGB channels, 224×224 = size)
+        → .to(DEVICE): Moves tensor to GPU/CPU where model lives.
+
+      with torch.no_grad():
+        → Context manager that disables gradient computation.
+        → Gradients are arrays tracking how much each weight contributed
+          to the output — needed for training, wasteful for inference.
+        → no_grad() reduces memory usage by ~50% and speeds up inference.
+
+        out = ts_model(pixel_values=t).last_hidden_state[:,0,:]
+          → Runs TimesFormer forward pass.
+          → pixel_values=t: named argument (TimesFormer API requirement).
+          → Returns a BaseModelOutput object.
+          → .last_hidden_state: Shape [1, N, 768] where N = number of tokens.
+          → [:,0,:]: Takes only the first token (CLS token — summary token).
+            : = all batches, 0 = first token, : = all 768 dimensions.
+          → Result shape: [1, 768].
+
+        out = ts_model.classifier(out)
+          → Passes 768-dim embedding through our Linear(768, 14) layer.
+          → Result: [1, 14] raw scores (logits) for each crime category.
+
+        probs = F.softmax(out, dim=1)
+          → Converts logits to probabilities.
+          → All 14 values now in range [0,1] and sum to 1.0.
+          → dim=1 means softmax is applied across the 14 class scores.
+
+        idx = torch.argmax(probs).item()
+          → torch.argmax: Returns index of highest probability.
+          → .item(): Converts PyTorch tensor to regular Python integer.
+
+        conf = probs[0][idx].item()
+          → Gets the probability value of the winning class.
+          → probs[0] = first (only) batch item.
+          → [idx] = the winning class's probability.
+
+      label = id_to_label[idx]
+        → Maps integer index to string label name.
+
+      Severity determination:
+        if label in DANGER_LABELS:    severity, alert = "danger", True
+        elif label in WARN_LABELS:    severity, alert = "warn", True
+        else:                         severity, alert = "normal", False
+
+      latest_result updates:
+        → label, confidence (rounded to 2 decimal places × 100), severity, alert.
+
+      if label != last_label:
+        → Label CHANGED → generate new explanation.
+        → If new label is NonViolence → use hardcoded safe message (no API call).
+        → Otherwise → call generate_explanation() → store in latest_result.
+        → Update last_label to track what we last explained.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 12: _hard_stop() — CLEAN SOURCE SWITCHING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  def _hard_stop():
+    """Kill everything immediately. No retries, no fallbacks."""
+
+    This function is called every time user switches sources or stops.
+    It must safely tear down all active resources and reset state.
+
+    Step 1: stop_event.set()
+      → Signals all threads to pause their main logic.
+      → capture_thread and ffmpeg_capture_thread see is_set()=True and loop
+        without doing anything useful.
+
+    Step 2: with source_id_lock: source_id += 1
+      → Increments source_id.
+      → All active video_ws WebSocket handlers check this and see their
+        saved my_sid no longer matches → they break their loop → disconnect.
+      → This cleanly terminates all WebSocket connections.
+
+    Step 3: live_mode = False
+      → Prevents threads from thinking there's still an active live source.
+
+    Step 4: Release the camera:
+      with cap_lock:
+          if cap is not None:
+              cap.release()  → Closes OpenCV's connection to the webcam.
+              cap = None     → Prevents dangling reference.
+
+    Step 5: Clear all frame buffers:
+      raw_frame = None
+      ann_frame = None
+      pred_buf.clear()
+        → Removes stale frames so new source starts fresh.
+        → Prevents new source from being analyzed using old source's frames.
+
+    Step 6: video_frames = []  and  vid_idx = 0
+      → Frees memory from uploaded video frames.
+      → Resets playback position.
+
+    Step 7: time.sleep(0.1)
+      → 100ms pause to allow WebSocket threads to see the new source_id
+        and actually exit their loops before we start the new source.
+
+    Step 8: stop_event.clear()
+      → Re-arms the event so threads can run again for the new source.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 13: FLASK ROUTES — HTTP ENDPOINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  @app.route('/')
+  def index():
+      return render_template('index.html')
+    → Serves the dashboard HTML page at the root URL.
+    → render_template looks for index.html in the /templates/ folder.
+
+  @app.route('/results')
+  def results():
+      return jsonify(latest_result)
+    → Returns the current detection state as JSON.
+    → Browser polls this every 1 second to update the sidebar.
+    → jsonify converts Python dict to proper JSON HTTP response with
+      Content-Type: application/json header.
+
+  @app.route('/webcam', methods=['POST'])
+  def start_webcam():
+    → Only accepts POST requests (not GET — avoids accidental activation).
+
+    new_cap = cv2.VideoCapture(0)
+      → Opens device index 0 (first available camera).
+      → On most systems, 0 = built-in webcam.
+
+    new_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+      → Sets internal OpenCV buffer to 1 frame.
+      → Default buffer is 4-10 frames; with larger buffer, we'd always be
+        reading old frames instead of the latest one. Buffer=1 ensures
+        we always get the most recent frame from the camera.
+
+    new_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    new_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    new_cap.set(cv2.CAP_PROP_FPS, 30)
+      → Requests camera to deliver 640×480 @ 30fps.
+      → Camera may not honor these exactly — it uses nearest supported mode.
+
+    if not new_cap.isOpened():
+        return jsonify({"status":"error","message":"Cannot open webcam"}), 500
+      → 500 = HTTP Internal Server Error.
+      → If webcam is unavailable (e.g., another app is using it), return error.
+
+    with cap_lock: cap = new_cap
+      → Safely sets the global cap to the new VideoCapture object.
+
+    live_mode = True
+    _start_new_source("webcam")
+      → Updates latest_result with "Detecting..." status for the new source.
+
+    return jsonify({"status":"ok"})
+      → 200 OK response tells browser the webcam started successfully.
+
+  @app.route('/cctv', methods=['POST'])
+  def start_cctv():
+    data = request.get_json()
+      → Parses JSON body from browser's POST request.
+
+    Extracts: ip, port, username, password, channel, subtype
+      → All stripped of whitespace.
+      → Default port: 554 (standard RTSP port).
+
+    rtsp_url = f"rtsp://{username}:{password}@{ip}:{port}/cam/realmonitor?channel={ch}&subtype={sub}"
+      → Dahua RTSP URL format.
+      → This URL is passed directly to FFmpeg (FFmpeg handles special characters
+        in passwords like @, #, etc. naturally).
+
+    safe_log = rtsp_url.replace(password, "****")
+      → Redacted version for logging. Never log passwords in plaintext.
+
+    _start_ffmpeg(rtsp_url, width=640, height=480)
+      → Launches FFmpeg subprocess with RTSP URL.
+
+    time.sleep(3)
+      → Waits 3 seconds for FFmpeg to connect to camera and start streaming.
+      → RTSP handshake takes 1-3 seconds typically.
+
+    if proc.poll() is not None:
+      → proc.poll() returns None if process is STILL RUNNING.
+      → Non-None return means FFmpeg already exited (connection failed).
+      → Return 500 error with helpful message.
+
+  @app.route('/upload', methods=['POST'])
+  def upload():
+    f = request.files['video']
+      → request.files is a dict of uploaded files.
+      → 'video' matches the name attribute of the HTML file input.
+
+    f.save("temp_upload.mp4")
+      → Saves uploaded file to disk. Necessary because cv2.VideoCapture
+        needs a file path, not a raw byte stream.
+
+    threading.Thread(target=_load_frames, daemon=True).start()
+      → Loads video frames in background.
+      → We return immediately (don't wait for loading).
+      → Frontend shows "DECODING FRAMES..." for a short time.
+      → The 800ms setTimeout in JS gives enough time before starting WS.
+
+    def _load_frames() [nested]:
+      tmp = cv2.VideoCapture(path)
+      fps = tmp.get(cv2.CAP_PROP_FPS)
+        → Reads the video file's native FPS (e.g., 24, 30, 60).
+
+      vid_fps = fps if fps and 5 < fps < 120 else 25.0
+        → Validates FPS is reasonable (between 5 and 120).
+        → Fallback to 25fps if file metadata is corrupted.
+
+      total = int(tmp.get(cv2.CAP_PROP_FRAME_COUNT))
+        → Total number of frames in the video.
+        → Used to decide whether to skip frames for long videos.
+
+      if total > 3000 and n % 2 != 0: continue
+        → For very long videos (>3000 frames, ~2 minutes at 25fps):
+          take every other frame (skip odd-numbered frames).
+        → Halves memory usage for long videos.
+        → Video still plays at correct speed (vid_fps stays the same).
+
+  @app.route('/stop', methods=['POST'])
+  def stop():
+    → Calls _hard_stop() then clears video_frames.
+    → Resets latest_result to "Waiting..." state.
+    → Returns 200 OK.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 14: FFmpeg INTEGRATION — CCTV/RTSP VIA SUBPROCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  _start_ffmpeg(rtsp_url, width=640, height=480):
+    cmd = [
+        "ffmpeg",
+        "-rtsp_transport", "tcp",   → Use TCP for RTSP (more reliable than UDP
+                                       which can lose packets, especially on WiFi)
+        "-i", rtsp_url,             → Input: the RTSP URL
+        "-vf", f"scale={width}:{height}",  → Video filter: scale output to 640×480
+        "-f", "rawvideo",           → Output format: raw video (no container/codec)
+        "-pix_fmt", "bgr24",        → Pixel format: BGR, 8 bits per channel (24 total)
+                                       BGR24 = 3 bytes per pixel (Blue, Green, Red)
+        "-an",                      → No audio output (we don't need it)
+        "-"                         → Output destination: stdout (pipe to Python)
+    ]
+
+    subprocess.Popen(cmd,
+        stdout=subprocess.PIPE,     → We read video bytes from stdout
+        stderr=subprocess.DEVNULL,  → Discard FFmpeg's status messages
+        bufsize=10**8               → Large pipe buffer (100MB) prevents blocking
+    )
+
+  WHY bgr24?
+    → OpenCV uses BGR format natively. If we used rgb24, we'd need to
+      convert every frame. bgr24 gives us frames ready to use directly.
+
+  FRAME_BYTES = rtsp_width * rtsp_height * 3
+    → 640 × 480 × 3 = 921,600 bytes per frame (exactly 900KB).
+    → We read EXACTLY this many bytes from stdout for each frame.
+    → This works because FFmpeg outputs a fixed-size frame every time.
+
+  np.frombuffer(raw_bytes, dtype=np.uint8).reshape((rtsp_height, rtsp_width, 3))
+    → np.frombuffer: Interprets bytes as a NumPy array of uint8 (0-255).
+    → .reshape: Arranges flat array into (H, W, 3) matrix (height, width, channels).
+    → Result: a standard OpenCV-compatible frame.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 15: MAIN BLOCK — APP STARTUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  if __name__ == "__main__":
+    → This block runs ONLY when app.py is executed directly (python app.py).
+    → Does NOT run when app.py is imported as a module.
+
+    threading.Thread(target=capture_thread,        daemon=True).start()
+    threading.Thread(target=ffmpeg_capture_thread, daemon=True).start()
+    threading.Thread(target=yolo_thread,           daemon=True).start()
+    threading.Thread(target=predict_thread,        daemon=True).start()
+      → Starts all 4 background threads.
+      → daemon=True: Killed when main thread (Flask server) exits.
+      → .start() begins execution of each thread's target function.
+
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+      → Starts Flask web server.
+      → host="0.0.0.0": Listen on ALL network interfaces, not just localhost.
+        This allows access from other devices on the same network.
+      → port=5000: Standard Flask development port.
+      → debug=False: Disables Flask debug mode (no auto-reload, no debugger).
+        Debug mode would restart the app and reload models every time code
+        changes — undesirable in production.
+      → threaded=True: Flask handles each HTTP request in a separate thread.
+        Without this, only one request could be processed at a time, and
+        the /results polling would block video streaming.
+
+================================================================================
+END OF DOCUMENT 2: app.py EXPLANATION
+================================================================================

@@ -1,0 +1,104 @@
+LITERATURE SURVEY
+----------------------------------------------------------------
+
+
+------------------------------------------------------------------------------------------------
+Title:
+Violence Detection From Industrial Surveillance Videos Using Deep Learning 
+
+Authors:
+Hamza Khan, Xiaohong Yuan, Letu Qingge, Kaushik Roy 
+
+
+Methodology 
+
+The paper proposes a three-stage deep learning framework for violence detection. First, a lightweight MobileNet-SSD CNN detects persons in video frames to remove irrelevant frames. Next, a 3D-CNN (C3D-based) extracts spatiotemporal features from 50-frame sequences. Finally, a SoftMax classifier categorizes the sequence as violent or non-violent and triggers real-time alerts. 
+
+
+Gap Identification / Limitations 
+
+Although the model improves efficiency and accuracy, cross-dataset experiments show reduced performance when tested on unseen datasets, indicating limited generalization. The system still produces false positives and false negatives in complex environments such as occluded or crowded scenes. Additionally, it relies only on visual input and does not incorporate multimodal or explainable AI components.
+
+Link : https://ieeexplore.ieee.org/document/10844266
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+Title:
+STAA: Spatio-Temporal Attention Attribution for Real-Time Interpreting Transformer-Based AI Video Models 
+
+Authors:
+Zerui Wang and Yan Liu 
+
+
+Methodology 
+
+The paper proposes STAA, an attention-based XAI method for Transformer video models that extracts both spatial and temporal importance directly from self-attention weights in a single forward pass. It applies thresholding and visualization techniques to enhance explanations and supports real-time deployment (~150 ms latency). 
+
+
+Gap Identification / Limitations
+
+STAA works only for Transformer-based models and cannot be directly applied to CNN architectures. Raw attention maps may contain noise and require post-processing, and attention may not fully represent causal feature importance.
+
+Link: paper : https://ieeexplore.ieee.org/document/11020668
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Title:
+Video Surveillance Anomaly Detection: A Review on Deep Learning Benchmarks 
+
+Authors:
+Kashaf U. Duja, Izhar Ahmed Khan, and Mohammed Alsuhaibani  
+
+
+Methodology 
+
+This paper provides a comprehensive review of deep learning-based anomaly detection methods in video surveillance. It analyzes benchmark datasets, compares supervised, unsupervised, and semi-supervised approaches, and evaluates performance using common metrics such as AUC and accuracy. The study categorizes models based on reconstruction-based, prediction-based, and hybrid deep learning frameworks. 
+
+
+Gap Identification / Limitations 
+
+The review highlights challenges such as poor generalization across datasets, lack of large-scale realistic anomaly datasets, and difficulty in detecting rare or subtle anomalies. Many models suffer from high computational cost and limited real-time deployment capability, and there is still no standardized evaluation protocol across benchmarks. 
+
+Link : https://ieeexplore.ieee.org/document/10744017
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Title:
+Augmenting the Robustness and Efficiency of Violence Detection Systems for Surveillance and Non-Surveillance Scenarios 
+
+Authors:
+Muhammad Shoaib, Asad Ullah, Irshad Ahmed Abbasi, Fahad Algarni, and Adnan Shahid Khan 
+
+
+
+Methodology (Short Summary)
+
+The paper proposes two keyframe selection methods (DeepKeyFrm and AreaDiffKey) to reduce redundant frames and computational cost. Two classification models, EvoKeyNet (CNN + evolutionary feature selection) and KFCRNet (CNN feature extraction + ensemble RNN with LSTM, Bi-LSTM, GRU), are used for violence classification. The models are evaluated on five datasets (Hockey Fight, Violent Flow, RLVS, UCF-Crime, ShanghaiTech) using accuracy, AUC, ANOVA, and Tukey statistical tests. 
+
+
+Gap Identification / Limitations (Short Summary)
+
+The system requires careful threshold tuning for keyframe selection and hyperparameter optimization, which may limit adaptability to highly dynamic scenes. Although performance is high, cross-dataset generalization and handling extremely complex real-world environments remain challenging. The approach also focuses mainly on visual features without multimodal or explainable AI integration. 
+
+Link : https://ieeexplore.ieee.org/document/10304142
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Title:
+A Comprehensive Survey of Machine Learning Methods for Surveillance Videos Anomaly Detection 
+
+
+Authors:
+(As listed in the paper) 
+
+
+Methodology (Short Summary)
+
+This paper presents a comprehensive survey of machine learning and deep learning techniques used for anomaly detection in surveillance videos. It categorizes approaches into supervised, semi-supervised, and unsupervised methods, and reviews feature extraction strategies, model architectures (CNNs, RNNs, Autoencoders, GANs), and benchmark datasets. The survey also compares evaluation metrics and highlights recent advancements in video-based anomaly detection. 
+
+
+Gap Identification / Limitations (Short Summary)
+
+The survey identifies key challenges such as limited large-scale realistic datasets, poor cross-dataset generalization, high computational complexity, and difficulty in detecting rare or subtle anomalies. Many existing methods struggle with real-time deployment and lack robustness in complex, crowded, and dynamic environments.
+
+Link : https://ieeexplore.ieee.org/document/10271300
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
