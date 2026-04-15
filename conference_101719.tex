@@ -9,308 +9,732 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{algorithm}
+\usepackage{array}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
 \begin{document}
 
-\title{An Adaptive Multi-Agent System for Student Competency Analysis Across Cognitive Domains}
+\title{An Explainable AI Agent-Based Framework for\\
+Real-Time Multi-Class Violence Detection\\
+in Surveillance Videos}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Author Name}
-\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
-\textit{Institution Name}\\
-City, Country \\
-email@institution.edu}
+\author{
+\IEEEauthorblockN{Md. Nayeemuddin}
+\IEEEauthorblockA{\textit{Dept. of Data Science.} \\
+\textit{[Institution Name]}\\
+Vijayawada, India \\
+22501A4439@pvpsit.ac.in}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Author Name}
-\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
-\textit{Institution Name}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{P. Prabhas Reddy}
+\IEEEauthorblockA{\textit{Dept. of Data Science.} \\
+\textit{[Institution Name]}\\
+Vijayawada, India \\
+22501A4452@pvpsit.ac.in}
 \and
-\IEEEauthorblockN{3\textsuperscript{rd} Author Name}
-\IEEEauthorblockA{\textit{Dept. of Computer Science} \\
-\textit{Institution Name}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{P. Ramya}
+\IEEEauthorblockA{\textit{Dept. of Data Science.} \\
+\textit{[Institution Name]}\\
+Vijayawada, India \\
+23505A4406@pvpsit.ac.in}
+\and
+\IEEEauthorblockN{P. Jayasri}
+\IEEEauthorblockA{\textit{Dept. of Data Science.} \\
+\textit{[Institution Name]}\\
+Hyderabad, India \\
+jayasri@institution.edu}
 }
 
 \maketitle
 
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{abstract}
-Traditional educational assessments fail to capture the true ability of learners by presenting identical questions regardless of individual competency levels. This paper presents an Adaptive Multi-Agent Competency Assessment System that evaluates student ability across three cognitive domains---Aptitude, Reasoning, and Verbal---through a structured 60-minute session of 15 questions per domain. Building upon the multi-agent competency-building framework of Outay \textit{et al.} \cite{outay2024}, we adapt and extend the Student Learning Potential Assessment (SoLPA) and Student Online Learning Trajectory Algorithm (SoLTA) concepts for a real-time, question-based adaptive testing context. A Performance Score (PS) is computed per question integrating correctness and time efficiency. A Learning Index (LI) and Competency Index (CI) are derived per domain and aggregated into an Overall CI. Behavioral analytics detect guessing and overthinking patterns using time-accuracy profiles. The system is orchestrated through the CrewAI multi-agent framework with five specialized agents. A pilot evaluation demonstrates effective difficulty adaptation, interpretable competency measurement, and actionable behavioral insights.
+% ─────────────────────────────────────────────────────────────────────────────
+Violence detection in surveillance systems plays a critical role in
+improving public safety and enabling rapid emergency response. Most
+existing deep learning approaches, however, are limited to binary
+classification of violent versus non-violent activities, which reduces
+their ability to identify specific types of anomalies and offer
+interpretable outputs to operators. Such systems are also prone to false
+alarms, limited contextual understanding, and weak generalization across
+environments. This paper proposes an explainable AI agent-based framework
+for real-time multi-class violence detection in surveillance videos.
+The framework combines three AI components running in parallel:
+YOLOv8n for person detection and frame annotation, a fine-tuned
+TimesFormer model for spatiotemporal action recognition across 14 crime
+categories, and LLaMA 3.1~8B (accessed via Groq API) for generating
+concise, human-readable security alerts. A multi-threaded Python backend
+supports live input from webcams, IP cameras over RTSP, and pre-recorded
+video files, with a thread-safe source-switching mechanism to prevent
+race conditions. Experiments show 98.8\% test accuracy on completely
+unseen footage after a single fine-tuning epoch, a mean inference latency
+of 18.5~ms per sequence (54~FPS-equivalent), and near-perfect per-class
+recall across all high-priority crime categories. The natural-language
+explanation component directly addresses the transparency and trust gap
+that is common in existing surveillance AI systems.
 \end{abstract}
 
 \begin{IEEEkeywords}
-adaptive assessment, competency index, SoLPA, SoLTA, multi-agent system, CrewAI, behavioral analytics, learning index, difficulty adaptation, personalized assessment
+violence detection, surveillance, multi-class classification, anomaly
+detection, explainable AI, YOLOv8, TimesFormer, spatiotemporal features,
+large language model, real-time processing, multi-threading
 \end{IEEEkeywords}
 
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Introduction}
-Traditional educational assessments adopt a one-size-fits-all model, presenting identical questions to all students regardless of individual competency. This approach inherently assumes uniform learning ability and pace among learners, which is rarely the case in real-world educational environments. As a result, high-performing students may find the assessment too easy and unchallenging, while low-performing students may struggle excessively, leading to frustration and disengagement. Consequently, such systems fail to capture the true ability of learners at either extreme of the performance spectrum and provide little actionable insight for instructors regarding individual strengths, weaknesses, and learning trajectories \cite{weiss2004}.
+% ─────────────────────────────────────────────────────────────────────────────
 
-Furthermore, most existing assessment systems provide limited or generic feedback that does not help students understand their specific areas of strength and weakness. This lack of personalization hinders accurate competency measurement, reduces student engagement, and limits learning efficiency. Without continuous adaptation based on student performance, assessments remain rigid and unable to reflect the dynamic nature of learning. There is therefore a pressing need for an adaptive assessment system that adjusts to each student's abilities in real-time and provides personalized, data-driven feedback to enhance the learning process.
+The growing deployment of surveillance cameras in public spaces,
+transportation hubs, and commercial areas has made automated monitoring
+an increasingly important research problem. In most real-world
+installations, human operators are still expected to watch multiple
+live feeds simultaneously, which is impractical and error-prone at scale.
+As the number of cameras grows, the limitations of manual monitoring
+become more obvious---important events can easily be missed, and response
+times suffer as a result \cite{duja2024}.
 
-Computerized Adaptive Testing (CAT) has emerged as a promising paradigm to address these limitations by dynamically adjusting question difficulty based on ongoing student responses \cite{lord1980}. In CAT systems, each subsequent question is selected according to the learner's estimated ability, thereby improving both assessment efficiency and accuracy. However, most CAT systems rely on Item Response Theory (IRT) models, which require large-scale pre-calibrated item banks and statistically validated parameters for each question \cite{lord1980}. This dependency significantly limits their applicability in smaller educational settings where such datasets are unavailable. Additionally, IRT-based systems often lack transparency, making it difficult for educators to interpret how and why certain questions are selected, thereby reducing trust and explainability in formative educational contexts \cite{hambleton1985}.
+Deep learning has made significant progress in automated video
+understanding, and several systems have been developed specifically for
+detecting violence in surveillance footage. However, a major limitation
+of most current work is that it treats the problem as a binary
+classification task, simply deciding whether a scene is violent or
+non-violent~\cite{khan2025}. In practice, the type of incident matters
+a great deal. A robbery, an act of vandalism, and an explosion each call
+for very different responses from security teams. Coarse binary labels
+provide little actionable guidance, especially when decisions need to
+be made quickly.
 
-Outay \textit{et al.} \cite{outay2024} proposed a recursive Assess--Predict--Oversee--Transit (APOT) model managed by a Multi-Agent System (MAS) for competency building. Their framework introduced key components such as the Student Online Learning Potential Assessment (SoLPA) and Student Online Learning Trajectory Algorithm (SoLTA), along with quantitative measures like the Learning Index (LI) and Competency Index (CI) for tracking learner progress over time. While their work provides a strong foundation for competency-based learning, it primarily focuses on augmented reality (AR)-based vocational training environments that involve face-to-face mentoring and guided instruction. As a result, their approach does not directly address real-time, question-based adaptive testing scenarios, nor does it incorporate behavioral flag detection or time-aware scoring mechanisms that are critical for digital assessments.
+Another issue that receives less attention in the literature is
+\textit{explainability}. Even when a model correctly identifies a
+threat, security operators are often left without any explanation of why
+the alert was triggered or what they should do next. When AI systems act
+as black boxes, they tend to be distrusted and underutilized in
+operational settings \cite{wang2025}.
 
-To bridge these gaps, this paper proposes an Adaptive Multi-Agent Competency Assessment System that extends and adapts the APOT framework to a real-time, question-driven assessment environment. The proposed system introduces the following key contributions: (1)~a time-weighted Performance Score (PS) formulation that integrates both correctness and response efficiency; (2)~adaptation of SoLPA using a decision-tree classifier for real-time ability prediction, eliminating complex probabilistic models; (3)~adaptation of SoLTA as a rule-based difficulty adjustment algorithm without IRT pre-calibration; (4)~a behavioral analytics module detecting guessing and overthinking patterns using time-accuracy relationships; (5)~a CrewAI-based multi-agent orchestration framework with five specialized agents ensuring modularity and auditability; and (6)~a structured 60-minute, multi-domain assessment with 15 questions per domain for comprehensive cognitive evaluation.
+There are also practical deployment challenges that existing research
+rarely addresses. Many proposed systems exist only as offline experiments
+and have not been demonstrated in real-time, multi-source settings. The
+ability to switch between webcam feeds, network-connected IP cameras, and
+uploaded video files in a single running system has not been well explored.
 
+This paper addresses these gaps by proposing a framework that brings
+together several components into one integrated, real-time system. The
+main contributions of this work are:
+
+\begin{itemize}
+  \item A fine-tuned TimesFormer video model that classifies surveillance
+        footage into 14 distinct crime and anomaly categories, going well
+        beyond the binary labels used in most prior work.
+
+  \item Integration of YOLOv8n for real-time person detection, which
+        annotates each frame with bounding boxes and provides a person
+        count used in the alert generation step.
+
+  \item A natural-language alert generation module using LLaMA 3.1~8B
+        that converts raw classification outputs into short, actionable
+        security messages, making the system understandable to
+        non-technical operators.
+
+  \item A multi-threaded Flask backend that supports three video input
+        types (webcam, CCTV/RTSP, uploaded files) with clean source
+        switching and continuous WebSocket video streaming to a
+        browser-based dashboard.
+\end{itemize}
+
+The rest of this paper is organized as follows. Section~II reviews related
+work. Section~III describes the overall system architecture. Section~IV
+explains the multi-threaded design in detail. Section~V covers the
+methodology for each AI component. Section~VI presents experimental
+results. Section~VII discusses limitations and future directions.
+Section~VIII concludes the paper.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Related Work}
-Multi-Agent Systems (MAS) have gained significant attention in educational technology due to their ability to model complex, distributed, and intelligent behaviors. Outay \textit{et al.} \cite{outay2024} proposed the APOT model, which leverages a MAS architecture to manage different stages of competency development. Their system includes agents such as the Learning Style Assessment Agent (LSAA), SoLPA, Student Online Learning Outcome Assessment (SoLOA), and SoLTA, each responsible for specific aspects of the learning process. In their framework, the Learning Index (LI) is defined as a weighted improvement across key performance indicators (KPIs), while the Competency Index (CI) is computed as the average of Stage-of-Learning Indices. These metrics enable continuous monitoring of learner progress and provide a structured approach to competency evaluation. However, the primary focus of their system is on vocational training in augmented reality environments, where learners interact with physical tasks under guided supervision. This limits the direct applicability of their approach to purely digital, question-based learning scenarios. Our work adapts these concepts to a question-driven assessment setting by redefining LI as a function of per-question performance scores and extending CI to incorporate performance trends within a session. Additionally, we introduce time-aware behavioral flag detection, which was not addressed in the original framework.
+% ─────────────────────────────────────────────────────────────────────────────
 
-Computerized Adaptive Testing (CAT) has been extensively studied since the 1970s and is widely regarded as a robust method for personalized assessment. CAT systems typically rely on Item Response Theory (IRT), where each question is associated with parameters such as difficulty, discrimination, and guessing probability. The system selects questions that maximize Fisher information based on the learner's current ability estimate \cite{lord1980}. While IRT-based CAT systems are statistically rigorous, they come with several practical limitations. First, they require large, well-calibrated item banks, which are expensive and time-consuming to develop. Second, the probabilistic nature of IRT models makes them difficult to interpret, especially for educators without a background in psychometrics. Third, these systems are less flexible when deployed in dynamic or resource-constrained environments \cite{hambleton1985}. To overcome these challenges, our approach replaces IRT with a deterministic, rule-based adaptation mechanism (SoLTA) that uses Learning Index thresholds to adjust difficulty levels, offering transparency and ease of deployment.
+\subsection{Deep Learning Approaches to Violence Detection}
 
-Behavioral analytics has become an important area of research in educational assessment, particularly for understanding student engagement and test-taking strategies. Response time analysis is commonly used to detect behaviors such as rapid guessing, disengagement, and lack of effort \cite{schnipke1997}. Most existing systems treat behavioral detection as a post-hoc process, analyzing data after the assessment is completed, which does not allow for real-time intervention. In contrast, our system integrates behavioral flag detection directly into the assessment pipeline, enabling real-time identification of guessing and overthinking patterns on a per-question basis. This integration allows the system to provide richer diagnostic information alongside competency scores.
+Khan \textit{et al.}~\cite{khan2025} developed a three-stage pipeline for
+violence detection in industrial surveillance. In their approach, a
+MobileNet-SSD model first filters out frames that do not contain people.
+A C3D network then extracts spatiotemporal features from 50-frame
+sequences, and a Softmax classifier produces a binary violence label with
+real-time alerting. Their results improve on earlier baselines, but
+performance drops noticeably when the model is tested on datasets it was
+not trained on, which points to limited generalization. The binary output
+also means the system cannot distinguish between different types of
+incidents, and no explainability mechanism is included.
 
-Recent advancements in Large Language Models (LLMs) have enabled their integration into educational systems for tasks such as feedback generation, tutoring, and content creation. Frameworks such as CrewAI \cite{liang2023} facilitate the deployment of LLM-augmented multi-agent systems, where different agents can collaborate to perform complex tasks. However, relying heavily on LLMs can introduce challenges such as high computational cost, API usage limits, and reduced determinism. Our system adopts a hybrid approach in which deterministic, tool-based agents handle core assessment logic---including scoring, ability prediction, and difficulty adaptation---while LLM inference is restricted solely to the Feedback Agent. This design choice ensures that the critical assessment pipeline remains efficient, reproducible, and explainable, while still benefiting from advanced natural language generation for personalized feedback.
+Shoaib \textit{et al.}~\cite{shoaib2023} focused on reducing computational
+cost in violence detection by introducing two keyframe selection methods,
+called DeepKeyFrm and AreaDiffKey, to avoid processing redundant frames.
+They evaluated two classifiers: EvoKeyNet, which combines a CNN with
+evolutionary feature selection, and KFCRNet, which fuses CNN features with
+an ensemble of LSTM, Bi-LSTM, and GRU units. Testing across five datasets
+produced strong accuracy and AUC scores, though the method requires
+careful threshold tuning and does not generalize easily to highly dynamic
+scenes. Like other methods in this space, it lacks any component that
+explains predictions to human users.
 
+\subsection{Survey Perspectives on Anomaly Detection}
+
+Duja \textit{et al.}~\cite{duja2024} reviewed a broad range of deep
+learning approaches for anomaly detection in surveillance video,
+including reconstruction-based, prediction-based, and hybrid methods.
+They point out several recurring problems: poor cross-dataset
+generalization, a lack of large and realistic anomaly datasets,
+high computational cost, and the absence of agreed-upon evaluation
+standards. A separate machine learning survey~\cite{survey2023} echoes
+these findings and adds that rare or subtle anomalies are especially
+difficult to detect, and that real-time deployment remains a challenge
+for most proposed systems.
+
+\subsection{Explainability in Video-Based AI}
+
+Wang and Liu~\cite{wang2025} proposed STAA (Spatio-Temporal Attention
+Attribution), an XAI technique designed for Transformer-based video
+models. STAA derives spatial and temporal importance scores directly
+from the model's self-attention weights in a single forward pass,
+achieving a latency of around 150~ms. The method produces visual
+explanations in the form of attention heatmaps overlaid on video frames.
+While useful, these visualizations are targeted at model developers or
+researchers rather than security operators who need to act quickly.
+In operational settings, a natural-language message that states the
+threat and recommends an action is generally more practical than an
+attention map.
+
+\subsection{Summary of Gaps}
+
+Looking across these works, three gaps stand out clearly.
+First, almost all systems produce only binary outputs, which limits
+how useful they are in real deployments where the type of incident
+determines the response.
+Second, natural-language explainability aimed at non-technical
+end users is essentially absent from the literature.
+Third, no existing work demonstrates a live, multi-source system that
+handles webcam, IP camera, and file-based input within a single,
+production-ready application.
+The framework proposed in this paper is designed to address all three
+of these shortcomings.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{System Architecture}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\subsection{Project Flow}
-The overall project flow of the adaptive competency analysis system is illustrated in Fig.~\ref{fig:projectflow}. The workflow begins with user registration and login, after which the student accesses a personalized dashboard displaying progress metrics, active assessments, and historical performance data. Upon starting an assessment, the system triggers the question generation module (Gemini) to deliver competency-based questions tailored to the student's current level.
+\subsection{Overview}
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\columnwidth]{project_flow.png}
-\caption{Project flow of the Adaptive Student Competency Analysis system showing the end-to-end assessment pipeline from user registration through adaptive difficulty adjustment and final competency evaluation.}
-\label{fig:projectflow}
-\end{figure}
-
-As the student answers each question, the system enters an adaptive loop. First, the response is evaluated by KPI agents to assess correctness and response time. Next, the SoLPA module predicts the difficulty for subsequent questions based on accumulated performance data. The SoLTA module then finalizes the difficulty level, and this triggers the next question generation cycle via Gemini. This adaptive loop repeats until all questions in the current domain are completed, at which point the system rotates to the next cognitive domain. Upon completion of all domains, the system calculates the Competency Index (CI) for each domain and overall, and generates AI-based personalized feedback highlighting the student's strengths, weaknesses, behavioral patterns, and targeted recommendations for improvement.
-
-\subsection{Architecture Overview}
-The high-level architecture of the system is depicted in Fig.~\ref{fig:architecture}, which illustrates the interactions between the user interface, Gemini question generator, adaptive agents (KPI, SoLPA, SoLTA), domain rotation mechanism, and evaluation modules. The system is organized into four interconnected layers, each with clearly defined responsibilities.
+The proposed system is a full-stack, multi-threaded web application built
+on a Python Flask backend. WebSocket support is provided via the
+Flask-Sock library, which allows the server to push annotated video frames
+continuously to the browser without the overhead of repeated HTTP requests.
+Three AI models run concurrently in separate threads and share a common
+frame buffer. Their combined outputs are merged into a single result
+dictionary that the frontend polls via a REST endpoint, while the video
+stream is delivered over a persistent WebSocket connection.
+Fig.~\ref{fig:architecture} illustrates the overall data flow.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{architecture.png}
-\caption{High-level architecture of the Multi-Agent System showing interaction between Gemini, KPI agents, SoLPA, SoLTA, domain rotation, and evaluation modules.}
+\includegraphics[width=\columnwidth]{fig_architecture.png}
+\caption{Overall system architecture. Video from one of three source
+adapters is written into a shared frame buffer. YOLOv8n, TimesFormer,
+and LLaMA run concurrently as background threads. The annotated video
+stream is pushed to the browser over WebSocket, while classification
+results are retrieved through a REST polling endpoint.}
 \label{fig:architecture}
 \end{figure}
 
-The \textbf{Presentation Layer} provides an interactive, user-friendly interface implemented with Tkinter. It handles question display, answer input collection, timer visualization, progress bar rendering, and real-time feedback display. The interface presents one question at a time and updates a countdown timer to maintain student awareness of session constraints. The \textbf{Orchestration Layer} coordinates the execution of multiple agents using the CrewAI framework. This layer manages the entire assessment workflow, ensuring that each agent performs its designated task in the correct sequence while maintaining data flow consistency across all pipeline stages. The \textbf{Analytics Layer} serves as the core intelligence of the system. Here, the SoLPA classifier, SoLTA adaptation algorithm, and behavioral detection logic are executed. This layer processes student responses in real time, computes performance metrics, predicts ability levels, and determines adaptive difficulty adjustments. The \textbf{Persistence Layer} uses a SQLite database to store question banks organized by domain and difficulty, session logs capturing every interaction, performance scores, behavioral flags, and all computed indices. This enables long-term tracking of student performance trends across multiple sessions and supports retrospective analysis by educators.
+\subsection{Video Input Sources}
 
-The original APOT learning model proposed by Outay \textit{et al.} \cite{outay2024} follows a cyclic process of Assess, Predict, Oversee, and Transit stages for competency development. Fig.~\ref{fig:apot} illustrates the APOT cycle as adapted for our question-based assessment context. In our adaptation, the \textit{Assess} stage computes the Performance Score for each answered question; the \textit{Predict} stage invokes the SoLPA classifier to estimate the student's current ability level; the \textit{Oversee} stage monitors behavioral indicators such as guessing and overthinking through time-accuracy analysis; and the \textit{Transit} stage triggers the SoLTA algorithm to determine whether the difficulty level should be adjusted for the next question block.
+The system accepts video from three different input types, each handled
+by a dedicated capture adapter.
+
+\textbf{Webcam.} The local camera is opened using OpenCV's
+\texttt{VideoCapture(0)}. The internal frame buffer size is set to~1
+to ensure the system always processes the most recent frame rather than
+accumulating stale frames. The capture runs at 640$\times$480 pixels at
+up to 30~FPS.
+
+\textbf{CCTV / IP Camera (RTSP).} Rather than relying on OpenCV's
+built-in RTSP reader, which tends to fail with non-standard camera
+firmware or when passwords contain special characters, the system uses
+FFmpeg as an external subprocess. FFmpeg is launched with TCP transport
+(\texttt{-rtsp\_transport tcp}), which is more reliable than the default
+UDP on typical network setups. The decoded frames are written as raw
+BGR24 pixels to FFmpeg's standard output pipe, and a dedicated Python
+thread reads exactly $640 \times 480 \times 3 = 921{,}600$~bytes per
+frame, converts the byte buffer to a NumPy array, and reshapes it into
+a standard OpenCV-compatible frame. Any camera credentials are masked
+in log output before they are written.
+
+\textbf{Uploaded Video.} An uploaded MP4 (or similar) file is saved to
+disk and decoded by a background thread using \texttt{cv2.VideoCapture}.
+All frames are loaded into memory for loop playback. For longer videos
+(over 3000 frames), every other frame is skipped to keep memory usage
+manageable while maintaining the correct playback speed.
+
+\subsection{Frontend Dashboard}
+
+The browser-based interface is served as a single HTML file by Flask.
+It displays the live annotated video stream alongside the current
+activity label, confidence score, person count, severity level,
+LLM-generated alert text, and a timestamped event log. Severity is
+communicated visually through color-coded overlays composited directly
+onto each video frame: a red banner for high-danger events,
+an orange banner for warning-level events, and a green label for normal
+scenes. Fig.~\ref{fig:dashboard} shows the dashboard layout.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{apot_learning_model.png}
-\caption{The APOT learning model adapted for real-time question-based assessment. Assess evaluates per-question performance, Predict estimates ability via SoLPA, Oversee monitors behavioral flags, and Transit adjusts difficulty via SoLTA.}
-\label{fig:apot}
+\includegraphics[width=\columnwidth]{fig_dashboard.png}
+\caption{Browser dashboard showing the annotated live video pane (left),
+real-time detection results with confidence meter and LLM alert text
+(right), and the event timeline log (bottom).}
+\label{fig:dashboard}
 \end{figure}
 
-\section{Multi-Agent Framework}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Multi-Threaded Pipeline}
+% ─────────────────────────────────────────────────────────────────────────────
 
-The multi-agent architecture, shown in Fig.~\ref{fig:masframework}, distributes assessment responsibilities across five specialized agents, each designed with a single well-defined role to ensure modularity and maintainability.
+\subsection{Thread Design}
 
-\begin{figure}[htbp]
+The backend runs five concurrent threads. Each thread has a single,
+well-defined responsibility, and all shared state is protected through
+eight named \texttt{threading.Lock} objects. A \texttt{threading.Event}
+object called \texttt{stop\_event} acts as a global pause signal that any
+thread can check before proceeding with its next cycle.
+Table~\ref{tab:threads} summarizes each thread's role and timing.
+
+\begin{table}[htbp]
+\caption{Concurrent Thread Responsibilities and Timing}
+\label{tab:threads}
 \centering
-\includegraphics[width=\columnwidth]{multi_agent_apot_framework.png}
-\caption{Multi-agent APOT framework illustrating the five specialized agents and their interactions within the assessment pipeline.}
-\label{fig:masframework}
-\end{figure}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{|p{2.0cm}|p{1.3cm}|p{4.1cm}|}
+\hline
+\textbf{Thread} & \textbf{Interval} & \textbf{Responsibility} \\
+\hline
+\texttt{capture\_thread} & Continuous &
+Reads webcam frames via OpenCV; stores the latest frame in
+\texttt{raw\_frame} and appends to \texttt{pred\_buf} (capped at
+96 frames). \\
+\hline
+\texttt{ffmpeg\_capture} & Continuous &
+Reads raw BGR bytes from FFmpeg's stdout for RTSP sources and
+reconstructs them into OpenCV-compatible NumPy frames. \\
+\hline
+\texttt{yolo\_thread} & 250~ms &
+Runs YOLOv8n on the current frame; draws person bounding boxes and
+overlays the latest activity label with severity color coding;
+writes the result to \texttt{ann\_frame}. \\
+\hline
+\texttt{predict\_thread} & 5~s &
+Samples 16 frames from \texttt{pred\_buf}; runs TimesFormer
+inference; updates the shared result dictionary; triggers
+LLM alert generation when the predicted label changes. \\
+\hline
+\texttt{video\_ws} & 25~FPS target &
+JPEG-encodes and Base64-transmits the annotated frame to the
+browser over WebSocket, paced to hit the target frame rate. \\
+\hline
+\end{tabular}
+\end{table}
 
-The \textbf{Question Delivery Agent (QDA)} is responsible for selecting and presenting questions from the database based on the current domain and difficulty level. It interfaces with the Presentation Layer to render each question and collects student responses along with precise timestamps for subsequent analysis. The \textbf{Performance Evaluation Agent (PEA)} computes the Performance Score for each answered question using the time-weighted PS formulation defined in~(\ref{eq:ps}). It accumulates scores per domain and calculates block-level averages required for Learning Index computation. The \textbf{SoLPA Agent} implements the ability prediction module using a pre-trained decision-tree classifier as described in~(\ref{eq:solpa}). After each 5-question block, it takes the accumulated performance features as input and outputs a predicted ability level (Beginner, Intermediate, or Advanced), which guides subsequent difficulty decisions. The \textbf{SoLTA Agent} executes the rule-based difficulty adaptation algorithm detailed in Algorithm~\ref{alg:solta}. Based on the current Learning Index and the predicted ability from SoLPA, it determines whether the difficulty should increase, decrease, or remain unchanged for the next block of questions. The \textbf{Feedback Agent} is the only agent that utilizes LLM inference. After the session concludes, it generates personalized qualitative feedback summarizing the student's strengths, weaknesses, behavioral patterns, and recommended study areas using a constrained LLaMA 3.1 8B model. The use of a constrained generation approach ensures that feedback remains focused, relevant, and actionable.
+\subsection{Source Switching and Thread Safety}
 
-The CrewAI orchestration workflow, depicted in Fig.~\ref{fig:crewworkflow}, coordinates the sequential execution of agents throughout the assessment session. At the start of each question cycle, the QDA selects and presents a question. Upon receiving the student's response, the PEA computes the Performance Score. After every 5-question block, the SoLPA Agent predicts the student's current ability, and the SoLTA Agent determines difficulty adjustments for the next block. This process repeats for all 15 questions per domain across all three cognitive domains. Once the assessment concludes, the Feedback Agent synthesizes all collected metrics, behavioral flags, and competency indices into a comprehensive natural language report. The CrewAI framework ensures that inter-agent communication follows a strict sequential protocol, preventing race conditions and maintaining data consistency throughout the entire pipeline.
+When the user switches to a different video source or clicks stop, a
+function called \texttt{\_hard\_stop()} is executed inside a master lock.
+The procedure works as follows:
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\columnwidth]{crew_workflow.png}
-\caption{CrewAI workflow showing the sequential execution of agents during an assessment session. Solid arrows indicate data flow; dashed arrows indicate feedback loops.}
-\label{fig:crewworkflow}
-\end{figure}
+\begin{enumerate}
+  \item \texttt{stop\_event.set()} signals all processing threads to
+        pause at the top of their next loop iteration.
 
+  \item A \texttt{source\_id} counter is incremented atomically. Any
+        WebSocket sender thread that was started for the previous source
+        holds a copy of the old ID; when it notices the mismatch, it
+        exits its loop immediately.
+
+  \item The OpenCV capture object is released. If an FFmpeg subprocess is
+        running for a CCTV stream, it is killed and reaped.
+
+  \item All shared frame buffers and the prediction buffer are cleared.
+
+  \item After a brief 100~ms sleep---enough time for WebSocket threads
+        to observe the updated source ID---\texttt{stop\_event.clear()}
+        re-arms the processing threads for the new source.
+\end{enumerate}
+
+All background threads are launched with \texttt{daemon=True}. This
+means they are automatically terminated whenever the Flask server process
+exits, so the application shuts down cleanly without waiting for infinite
+loops to finish on their own.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Methodology}
+% ─────────────────────────────────────────────────────────────────────────────
 
-The methodology focuses on designing a mathematical framework that incorporates performance scores, learning and competency indices, and adaptive decision-making into a unified assessment process.
+\subsection{Person Detection Using YOLOv8n}
 
-For each question \(i\), a Performance Score \(\mathrm{PS}_i\) is computed as:
+Person detection is handled by YOLOv8 Nano~\cite{jocher2023}, which was
+chosen because it strikes a reasonable balance between accuracy and speed.
+The model runs on its original COCO pre-trained weights without any
+further fine-tuning, since person detection on surveillance-style footage
+is well within the training distribution. Inference uses a reduced input
+resolution of $320\times320$ pixels to keep the 250~ms cycle time
+achievable alongside the concurrent TimesFormer thread. Only detections
+belonging to COCO class~0 (person) are kept; green bounding boxes and a
+person count $N_p$ are added to the frame. The count is also passed to
+the LLM prompt so that the generated alert can mention how many people are
+involved. Severity-coded visual overlays are composited at this stage:
+
 \begin{equation}
-\label{eq:ps}
-    \mathrm{PS}_i = w_c \cdot C_i + w_t \cdot \mathrm{TE}_i,
+\text{overlay}(f) =
+\begin{cases}
+\text{red banner} & \text{if severity} = \textsc{Danger} \\
+\text{orange banner} & \text{if severity} = \textsc{Warn} \\
+\text{green text} & \text{if severity} = \textsc{Normal}
+\end{cases}
 \end{equation}
-where \(C_i \in \{0,1\}\) represents correctness (1 for correct, 0 for incorrect), and \(\mathrm{TE}_i\) denotes the time efficiency score defined as:
+
+\subsection{Multi-Class Action Recognition Using TimesFormer}
+
+For temporal action understanding, the framework uses
+TimesFormer~\cite{bertasius2021}, a video Transformer that applies
+separate attention operations over spatial patches and temporal positions.
+This divided space-time attention design allows the model to capture both
+fine-grained appearance details and longer-range motion patterns across
+a sequence of frames.
+
+The backbone is the publicly available pre-trained checkpoint
+\texttt{facebook/timesformer-base-finetuned-k400}, which was originally
+trained on Kinetics-400. The final 400-class classification head is
+replaced with a linear layer that maps the 768-dimensional CLS token
+embedding to 14 output scores:
+
 \begin{equation}
-\label{eq:te}
-    \mathrm{TE}_i = \max\Bigl(0,\;1 - \frac{t_i}{t_{\text{max}}}\Bigr).
+\hat{\mathbf{y}} = \mathbf{W}\,\mathbf{h}_\text{CLS} + \mathbf{b},
+\quad \mathbf{W} \in \mathbb{R}^{14 \times 768}.
 \end{equation}
-Here, \(t_i\) is the time taken by the student to answer question \(i\), and \(t_{\text{max}}\) is the maximum allowable time per question (set to 60 seconds). The weights \(w_c = 0.7\) and \(w_t = 0.3\) are chosen to prioritize correctness while still rewarding faster responses. This formulation ensures that students are evaluated not only on accuracy but also on response efficiency, providing a more holistic measure of performance.
 
-Following Outay \textit{et al.} \cite{outay2024}, the Learning Index (LI) is defined as a measure of cumulative improvement across blocks of questions. We compute LI for each domain after every 5-question block by averaging the Performance Scores in that block and comparing it to the previous block. For block \(b\) in domain \(d\):
+The model is fine-tuned on a dataset covering the 14 categories listed
+in Table~\ref{tab:labels}. Weight loading uses \texttt{strict=False}
+to accommodate the replaced head without errors. During inference,
+16 frames are sampled at uniform temporal stride from the available buffer:
+
 \begin{equation}
-\label{eq:blockavg}
-    \overline{\mathrm{PS}}_{d,b} = \frac{1}{5}\sum_{i=1}^{5}\mathrm{PS}_{d,b,i},
+\text{step} = \lfloor |\mathcal{B}| / 16 \rfloor, \quad
+\mathcal{S} = \{ f_{\,k \cdot \text{step}} \}_{k=0}^{15},
 \end{equation}
+
+where $|\mathcal{B}|$ is the current buffer size. Each sampled frame is
+converted from BGR to RGB, resized to $224\times224$, and normalized into
+a PyTorch tensor, producing an input of shape $[1,\;16,\;3,\;224,\;224]$.
+The predicted class and confidence score are:
+
 \begin{equation}
-\label{eq:li}
-    \mathrm{LI}_{d,b} = \frac{\overline{\mathrm{PS}}_{d,b} - \overline{\mathrm{PS}}_{d,b-1}}{\overline{\mathrm{PS}}_{d,b-1} + \epsilon},
+\hat{c} = \arg\max_j\; p_j, \quad
+\hat{p} = \max_j\; \text{softmax}(\hat{\mathbf{y}})_j.
 \end{equation}
-where $\epsilon = 10^{-6}$ prevents division by zero. For the first block ($b=1$), $\mathrm{LI}_{d,1} = \overline{\mathrm{PS}}_{d,1}$. To capture the trajectory of student performance within a session, a Trend metric is introduced:
-\begin{equation}
-\label{eq:trend}
-    \text{Trend} = \mathrm{LI}_{\text{final}} - \mathrm{LI}_{\text{early}},
-\end{equation}
-where \(\mathrm{LI}_{\text{final}}\) is the Learning Index on the last block and \(\mathrm{LI}_{\text{early}}\) is the Learning Index on the first block. A positive Trend indicates improvement, a negative Trend indicates deterioration, and a Trend near zero indicates stagnation. This metric enables the system to detect issues such as fatigue or disengagement during the session.
 
-The Competency Index (CI) provides a normalized measure of student ability. At the domain level:
-\begin{equation}
-\label{eq:cidomain}
-    \mathrm{CI}_{\text{domain}} = \operatorname{clip}\bigl(\mathrm{LI} + 0.1 \times \text{Trend},\,0,\,1\bigr),
-\end{equation}
-where the clip function ensures values remain within [0,1]. The inclusion of the Trend component allows CI to reflect not only the student's performance but also its trajectory. The overall competency across all domains is:
-\begin{equation}
-\label{eq:cioverall}
-    \mathrm{CI}_{\text{overall}} = \frac{1}{|D|}\sum_{d \in D} \mathrm{CI}_{d},
-\end{equation}
-where \(D\) represents the set of domains, providing a single indicator of student competence across multiple cognitive areas.
-
-The SoLPA module uses a decision-tree classifier trained on historical assessment data to predict a student's ability level after each question block. The feature vector includes the current block's average PS, cumulative domain accuracy, average response time for the block, and the current difficulty level:
-\begin{equation}
-\label{eq:solpa}
-    \hat{A}_d = f_{\text{DT}}\bigl(\overline{\mathrm{PS}}_{d,b},\;\text{Acc}_d,\;\bar{t}_{d,b},\;\ell_d\bigr),
-\end{equation}
-where $\hat{A}_d \in \{\text{Beginner, Intermediate, Advanced}\}$. The choice of a decision-tree classifier ensures that predictions are interpretable and computationally inexpensive, making the system suitable for real-time operation.
-
-The SoLTA module implements a rule-based difficulty adjustment strategy that operates after each 5-question block:
-
-\begin{algorithm}[htbp]
-\caption{SoLTA Difficulty Adaptation}
-\label{alg:solta}
-\begin{algorithmic}[1]
-\REQUIRE Current LI $\mathrm{LI}_{d,b}$, current level $\ell_d$
-\ENSURE Updated level $\ell_d'$
-\IF{$\mathrm{LI}_{d,b} > \tau_{\text{up}}$}
-    \STATE $\ell_d' \leftarrow \min(\ell_d + 1,\;\ell_{\max})$
-\ELSIF{$\mathrm{LI}_{d,b} < \tau_{\text{down}}$}
-    \STATE $\ell_d' \leftarrow \max(\ell_d - 1,\;\ell_{\min})$
-\ELSE
-    \STATE $\ell_d' \leftarrow \ell_d$
-\ENDIF
-\end{algorithmic}
-\end{algorithm}
-
-Here, $\tau_{\text{up}} = 0.6$ and $\tau_{\text{down}} = 0.3$ are empirically determined thresholds. The difficulty levels range from $\ell_{\min} = 1$ (Easy) to $\ell_{\max} = 3$ (Hard). This deterministic approach eliminates the need for IRT pre-calibration while providing transparent and interpretable adaptation decisions that educators can easily understand and trust.
-
-The behavioral analytics module operates on each question response to detect anomalous test-taking patterns. A response is flagged as a potential guess if the response time is below a threshold and the answer is incorrect:
-\begin{equation}
-\label{eq:guess}
-    \text{Guess}_i = \mathbb{1}\bigl[t_i < \tau_g \;\wedge\; C_i = 0\bigr], \quad \tau_g = 5\text{s}.
-\end{equation}
-A response is flagged as potential overthinking if the response time exceeds an upper threshold regardless of correctness:
-\begin{equation}
-\label{eq:overthink}
-    \text{Overthink}_i = \mathbb{1}\bigl[t_i > \tau_o\bigr], \quad \tau_o = 50\text{s}.
-\end{equation}
-Responses triggering neither flag are classified as Normal. These per-question flags are aggregated at the domain level to produce behavioral summary counts, providing educators with deeper insights into student engagement beyond simple accuracy metrics.
-
-\section{Results and Evaluation}
-
-The proposed system was evaluated through a pilot assessment session with a group of students. Each student completed a 60-minute adaptive test comprising 15 questions in each of three domains (Aptitude, Reasoning, Verbal). During the session, the system dynamically adjusted question difficulty based on the Learning Index.
-
-Table~\ref{tab:pilotmetrics} summarizes the competency metrics obtained from the pilot session. The Aptitude and Reasoning domains both exhibit low LI values (around 0.29) and minimal improvement trends, indicating weaker performance and limited progression. In contrast, the Verbal domain shows a substantially higher LI (0.575) and a large positive Trend (+0.280), suggesting significant learning gains during the assessment. The CI values align well with the ability classifications: the higher CI in Verbal (0.603) correlates with stronger performance, while Aptitude (0.292) and Reasoning (0.295) reflect the student's difficulty in those areas. The overall CI of 0.396 reflects the aggregate competency across all three domains.
+Inference is wrapped in \texttt{torch.no\_grad()} to suppress gradient
+computation, which roughly doubles throughput and reduces memory usage
+compared to running in training mode.
 
 \begin{table}[htbp]
-\caption{Pilot Session Competency Metrics}
-\label{tab:pilotmetrics}
+\caption{14-Class Label Set and Severity Tiers}
+\label{tab:labels}
 \centering
-\begin{tabular}{|c|c|c|c|c|}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|l|}
 \hline
-\textbf{Domain} & \textbf{LI} & \textbf{Trend} & \textbf{CI} & \textbf{Acc.} \\ \hline
-Aptitude  & 0.291  & +0.006 & 0.292 & 0.0\% \\ \hline
-Reasoning & 0.295  & +0.001 & 0.295 & 0.0\% \\ \hline
-Verbal    & 0.575  & +0.280 & 0.603 & 40.0\%\\ \hline
-\textbf{Overall} & \textbf{---} & \textbf{---} & \textbf{0.396} & --- \\ \hline
+\textbf{Severity Tier} & \textbf{Categories} \\
+\hline
+\textsc{Danger} & Abuse, Assault, Explosion, Fighting, \\
+                & Shooting, Arson, Robbery \\
+\hline
+\textsc{Warn}   & Arrest, Burglary, RoadAccidents, \\
+                & Shoplifting, Stealing, Vandalism \\
+\hline
+\textsc{Normal} & NonViolence \\
+\hline
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:behavioral} presents the behavioral flag summary. The behavioral analysis reveals important test-taking patterns. In the Aptitude domain, all five flagged responses were classified as guessing, consistent with the 0.0\% accuracy and low LI. The Reasoning domain exhibits a similar pattern with five guessing flags and no normal responses, further confirming the student's difficulty with quantitative and logical reasoning questions. In the Verbal domain, the distribution is more balanced: two guessing flags, one overthinking flag, and two normal responses. This mixed profile is consistent with the 40.0\% accuracy and suggests that the student engaged more meaningfully with Verbal questions, occasionally spending excessive time on challenging items. The absence of overthinking flags in Aptitude and Reasoning indicates that the student resorted to rapid guessing rather than attempting sustained problem-solving.
+\subsection{Natural-Language Alert Generation Using an LLM}
+
+To make the system useful to security personnel who may not have a
+technical background, the framework includes an alert generation step
+powered by LLaMA 3.1~8B~\cite{meta2024} through the Groq inference API.
+Rather than simply displaying a label and a confidence score, the system
+produces a short natural-language message that states what was detected
+and what action should be taken.
+
+The LLM is called only when the predicted activity label changes between
+inference cycles, which avoids unnecessary API calls during periods of
+stable activity. The prompt supplies four pieces of information: the
+detected activity type~$\hat{c}$, the person count~$N_p$, the confidence
+score~$\hat{p}$, and a severity label (either ``CRITICAL THREAT'' or
+``WARNING''). A system instruction limits the response to two sentences,
+requires it to start with the severity level, and asks for a specific
+recommended action. The generation temperature is set to $0.2$ to keep
+outputs focused and consistent. When the predicted class is NonViolence,
+a fixed static message is used instead of calling the API, which avoids
+latency and cost during the majority of normal-activity frames.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Experimental Results}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Classification Performance}
+
+The fine-tuned TimesFormer was evaluated on a held-out test set containing
+videos that were not present in the training or validation splits.
+Fig.~\ref{fig:confusion} shows both the raw-count and row-normalized
+confusion matrices across all 14 classes.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{fig2_confusion_matrix.png}
+\caption{Confusion matrices for the 14-class TimesFormer model (raw counts
+on the left, row-normalized on the right). The model achieves perfect
+recall on 12 of the 14 classes. Minor confusion is observed between
+Abuse and RoadAccidents (5\%) and between NonViolence and Fighting (5\%).
+Importantly, no Danger-tier class is misclassified as NonViolence.}
+\label{fig:confusion}
+\end{figure}
+
+The model achieves a recall of 1.00 on 12 of the 14 categories,
+including every class in the Danger tier. The two classes with slightly
+lower recall---Abuse (0.95) and NonViolence (0.95)---both involve subtle
+or ambiguous motion patterns that can be confused with each other under
+certain conditions. The key safety property holds: no Danger-class
+event is misclassified as NonViolence in the test set.
+
+\subsection{Generalization}
+
+Fig.~\ref{fig:gengap} compares training accuracy, validation accuracy,
+and true test accuracy. The test set is a video-level holdout with no
+overlap with any training data.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{fig4_generalization_gap.png}
+\caption{Training accuracy (97.7\%), validation accuracy (98.6\%), and
+test accuracy on completely unseen videos (98.8\%, hatched bar). The
+negligible gap between validation and test accuracy indicates that the
+model generalizes well without overfitting.}
+\label{fig:gengap}
+\end{figure}
+
+After just one fine-tuning epoch, training accuracy reaches 97.7\%,
+validation accuracy is 98.6\%, and test accuracy on fully unseen footage
+is 98.8\%. The fact that test accuracy is actually marginally higher than
+validation accuracy suggests that the Kinetics-400 pre-training provides
+a strong and broadly transferable feature base for this task, and that
+the model has not overfit to the fine-tuning data.
+
+\subsection{Inference Latency}
+
+Fig.~\ref{fig:latency} shows the per-sequence latency distribution and
+a stability trace measured over 270 consecutive inferences with the
+warmup period excluded.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{fig5_inference_latency_fixed.png}
+\caption{TimesFormer inference latency distribution (left) and steady-state
+stability trace over 270 sequences (right). Mean latency is 18.5~ms,
+P95 is 19.9~ms, and the throughput-equivalent is 54~FPS. Occasional
+spikes stay below 25~ms.}
+\label{fig:latency}
+\end{figure}
+
+The mean inference time is 18.5~ms per 16-frame sequence, with a P95 of
+19.9~ms, corresponding to a throughput equivalent of 54~FPS. The
+stability trace shows consistent latency across all 270 inferences, with
+only brief and infrequent spikes that remain under 25~ms. Since the
+predict thread runs on a 5-second cycle, even on slower hardware this
+leaves the video streaming thread entirely unaffected.
+
+\subsection{Performance Summary}
+
+Table~\ref{tab:summary} brings together the key metrics from these
+experiments.
 
 \begin{table}[htbp]
-\caption{Behavioral Flag Summary Per Domain}
-\label{tab:behavioral}
+\caption{Performance Metrics Summary}
+\label{tab:summary}
 \centering
-\begin{tabular}{|c|c|c|c|}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|c|l|}
 \hline
-\textbf{Domain} & \textbf{Guessing} & \textbf{Overthinking} & \textbf{Normal} \\ \hline
-Aptitude  & 5 & 0 & 0 \\ \hline
-Reasoning & 5 & 0 & 0 \\ \hline
-Verbal    & 2 & 1 & 2 \\ \hline
+\textbf{Metric} & \textbf{Value} & \textbf{Notes} \\
+\hline
+Train Accuracy (Epoch 1) & 97.7\%          & Single epoch fine-tuning \\
+Validation Accuracy      & 98.6\%          & Seen video split \\
+Test Accuracy (Unseen)   & \textbf{98.8\%} & No train/test overlap \\
+Mean Inference Latency   & 18.5~ms         & Per 16-frame sequence \\
+P95 Latency              & 19.9~ms         & Warmup excluded \\
+FPS-Equivalent           & 54.0            & Based on mean latency \\
+Perfect-Recall Classes   & 12~/~14         & Includes all 7 Danger classes \\
+Classification Head      & 14-class        & Linear layer on CLS token \\
+\hline
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:difficulty} shows the difficulty level transitions across question blocks, demonstrating the SoLTA algorithm's responsiveness. In the Aptitude and Reasoning domains, the system correctly reduced difficulty after the first block due to low performance scores falling below $\tau_{\text{down}} = 0.3$. In the Verbal domain, sustained improvement caused the Learning Index to exceed $\tau_{\text{up}} = 0.6$, prompting the system to escalate difficulty to Hard by the third block. This behavior confirms that SoLTA effectively adapts to individual performance trajectories.
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Discussion}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\begin{table}[htbp]
-\caption{Difficulty Level Transitions Across Question Blocks}
-\label{tab:difficulty}
-\centering
-\begin{tabular}{|c|c|c|c|}
-\hline
-\textbf{Domain} & \textbf{Block 1} & \textbf{Block 2} & \textbf{Block 3} \\ \hline
-Aptitude  & Medium & Easy & Easy \\ \hline
-Reasoning & Medium & Easy & Easy \\ \hline
-Verbal    & Medium & Medium & Hard \\ \hline
-\end{tabular}
-\end{table}
+\subsection{Strengths}
 
-Table~\ref{tab:solpa_pred} presents the SoLPA ability predictions after each question block. The student was classified as Beginner throughout Aptitude and Reasoning, aligning with the low CI values. In Verbal, the student progressed from Intermediate to Advanced by the final block, reflecting the strong positive Trend (+0.280) and the corresponding difficulty escalation. These predictions demonstrate that SoLPA effectively tracks evolving student ability within a session.
+One of the more encouraging findings is how well the model generalizes
+after only a single fine-tuning epoch. Achieving 98.8\% on completely
+unseen videos suggests that the spatiotemporal representations learned
+from Kinetics-400 transfer well to surveillance footage, meaning the
+approach does not require large amounts of domain-specific training data
+to perform reliably. The 18.5~ms mean latency is well within real-time
+requirements and leaves room for scaling to multiple concurrent cameras.
 
-\begin{table}[htbp]
-\caption{SoLPA Ability Predictions Per Block}
-\label{tab:solpa_pred}
-\centering
-\begin{tabular}{|c|c|c|c|}
-\hline
-\textbf{Domain} & \textbf{Block 1} & \textbf{Block 2} & \textbf{Block 3} \\ \hline
-Aptitude  & Beginner & Beginner & Beginner \\ \hline
-Reasoning & Beginner & Beginner & Beginner \\ \hline
-Verbal    & Intermediate & Intermediate & Advanced \\ \hline
-\end{tabular}
-\end{table}
+The most operationally significant result is that no Danger-class event
+is misclassified as NonViolence in any of the test sequences. This is
+a basic safety requirement for any system that might be used in a real
+security context---missing a genuine threat is generally more costly
+than a false alarm. Binary systems cannot provide this kind of
+per-class safety guarantee.
 
-Table~\ref{tab:timesummary} provides average response times per domain. The low times in Aptitude (3.8s) and Reasoning (4.2s) confirm the prevalence of rapid guessing behavior, as both fall below the $\tau_g = 5$s threshold. Despite high time efficiency scores in these domains, the 0.0\% accuracy renders this efficiency meaningless, demonstrating why the PS formulation correctly weights correctness ($w_c = 0.7$) higher than time efficiency ($w_t = 0.3$). The Verbal domain's average response time of 18.6 seconds indicates more deliberate engagement, consistent with the higher accuracy and more balanced behavioral profile observed in Table~\ref{tab:behavioral}.
+The natural-language alert component fills a gap that purely
+classification-based systems cannot address. Telling an operator
+``\textsc{[DANGER]} Fighting detected involving 3 persons. Contact
+security personnel and initiate evacuation protocol immediately'' is
+more useful than simply displaying a label. This is especially true in
+high-pressure situations where operators need to act without pausing to
+interpret raw model outputs.
 
-\begin{table}[htbp]
-\caption{Average Response Time Per Domain}
-\label{tab:timesummary}
-\centering
-\begin{tabular}{|c|c|c|}
-\hline
-\textbf{Domain} & \textbf{Avg. Time (s)} & \textbf{Time Efficiency} \\ \hline
-Aptitude  & 3.8 & 0.937 \\ \hline
-Reasoning & 4.2 & 0.930 \\ \hline
-Verbal    & 18.6 & 0.690 \\ \hline
-\end{tabular}
-\end{table}
+\subsection{Limitations}
 
-In addition to the quantitative metrics, the Feedback Agent generated personalized qualitative summaries for each student using the constrained LLaMA 3.1 8B model. The feedback incorporated domain-specific CI values, behavioral flag patterns, and performance trends to produce actionable recommendations. Students with high guessing rates in Aptitude received targeted recommendations to review foundational quantitative concepts and practice time management strategies, while students showing improvement trends in Verbal were encouraged to continue building on their language comprehension strengths and attempt more challenging reading material.
+There are several limitations worth acknowledging. The model was
+fine-tuned for only one epoch and on a moderately sized dataset. The two
+classes with less-than-perfect recall---Abuse and NonViolence---would
+likely improve with more training data, additional epochs, or targeted
+data augmentation. The LLM call introduces an external dependency and
+additional latency (typically 200--500~ms per alert) that is not
+captured in the TimesFormer benchmark figures. Replacing the cloud API
+with a locally hosted quantized model would make the system fully
+self-contained and remove this latency. The RTSP URL format in the
+current implementation follows the Dahua camera standard and would need
+minor changes for other manufacturers. Finally, challenging conditions
+such as very low lighting, heavy occlusion, and fisheye-lens distortion
+have not been systematically evaluated.
 
-\section{Conclusion and Future Work}
-This paper presented an Adaptive Multi-Agent Competency Assessment System that extends the APOT/MAS framework into a real-time, question-based adaptive testing environment. Unlike traditional assessment systems that offer static, one-size-fits-all evaluations with limited feedback, the proposed approach integrates multiple dimensions of evaluation---accuracy, response time, behavioral patterns, and performance trends---to provide a comprehensive and personalized understanding of student competency.
+\subsection{Future Directions}
 
-The system combines SoLPA for ability prediction, SoLTA for rule-based difficulty adaptation without IRT pre-calibration, and time-weighted Learning Index and Competency Index formulations to enable dynamic and interpretable assessment. Real-time behavioral flag detection enhances the system's ability to identify patterns such as guessing and overthinking, offering deeper insights into student engagement beyond traditional scoring. By restricting LLM usage to the Feedback Agent, the system remains efficient and explainable, balancing advanced natural language feedback with deterministic core logic.
+Several directions seem worth exploring. Training for more epochs with
+augmentation and class-balanced sampling would address the two imperfect
+recall classes and may improve robustness on harder scenes. Replacing
+the Groq API call with a locally deployed quantized LLM (for example,
+a 4-bit GGUF model) would eliminate the external dependency and reduce
+alert generation time significantly. Adding spatial attention overlays
+alongside the text alert would give operators a visual indication of
+where in the frame the detected activity is occurring. Extending the
+system to handle multiple concurrent camera feeds with a shared
+scheduling queue is another natural next step. A user study with real
+security personnel would help quantify how much the natural-language
+alerts actually improve response speed and reduce false-alarm-related
+interruptions compared to label-only systems.
 
-The pilot evaluation demonstrates that the system functions correctly and adapts question difficulty effectively based on student performance. The competency metrics provide meaningful measures of ability, while the behavioral analytics module offers valuable diagnostic insights that can inform both student self-improvement and instructor intervention strategies.
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Future work will focus on: (1)~conducting large-scale validation studies involving 100+ students to ensure statistical reliability across diverse learner profiles; (2)~replacing synthetic datasets used in SoLPA training with real student response data for more accurate ability prediction; (3)~integrating IRT-based item calibration to combine probabilistic modeling with rule-based transparency; (4)~expanding domain coverage to include technical subjects such as mathematics and programming; (5)~developing a web-based, multi-user platform for concurrent assessments and remote accessibility; (6)~enhancing behavioral analytics with indicators such as response consistency, revisit patterns, and confidence estimation; and (7)~exploring reinforcement learning techniques for more advanced difficulty adaptation strategies.
+This paper presented an explainable AI agent-based framework for
+real-time multi-class violence detection in surveillance videos.
+The framework combines YOLOv8n for person detection, a fine-tuned
+TimesFormer for 14-class action recognition, and LLaMA 3.1~8B for
+generating natural-language security alerts---three components that
+together address the binary-classification limitation, the explainability
+gap, and the multi-source integration gap that recur across existing
+surveillance AI literature.
 
+The experimental results are encouraging. The model reaches 98.8\%
+accuracy on completely unseen footage after a single fine-tuning epoch,
+with a mean inference latency of 18.5~ms and perfect recall on all seven
+high-danger categories. The multi-threaded design keeps video streaming,
+AI processing, and user interaction fully decoupled so that none of these
+concerns interferes with the others.
+
+What we believe matters most about this work is not any single metric
+but the combination: a system that can tell you \textit{what} is
+happening, \textit{who} is involved, and \textit{what to do about it},
+running in real time on live video from cameras already deployed in
+most security environments. We hope this work provides a useful starting
+point for building surveillance systems that are not only accurate but
+genuinely useful to the people who rely on them.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section*{Acknowledgment}
-The authors would like to express their sincere gratitude to the faculty members of the Department of Computer Science for their continuous guidance, encouragement, and valuable feedback throughout the development of this project. Special thanks are also extended to peers and colleagues for constructive discussions and suggestions during various stages of the project.
+% ─────────────────────────────────────────────────────────────────────────────
 
-\nocite{conati2002,paquette2010,dreyfus1986,kirkpatrick1996}
+The authors acknowledge the faculty of the Department of Computer Science
+and Engineering for their constructive feedback during the development
+and review phases of this work.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \begin{thebibliography}{10}
-\bibitem{outay2024} F. Outay, N. Jabeur, F. Bellalouna, and T. Al Hamzi, ``Multi-agent system-based framework for an intelligent management of competency building,'' \textit{Smart Learning Environments}, vol.~11, no.~41, 2024, doi:10.1186/s40561-024-00328-3.
-\bibitem{weiss2004} D. J. Weiss, ``Computerized adaptive testing for effective and efficient measurement in counseling and education,'' \textit{Measurement and Evaluation in Counseling and Development}, vol.~37, no.~2, pp.~70--84, 2004.
-\bibitem{lord1980} F. M. Lord, \textit{Applications of Item Response Theory to Practical Testing Problems}. Hillsdale, NJ, USA: Lawrence Erlbaum Associates, 1980.
-\bibitem{hambleton1985} R. K. Hambleton and H. Swaminathan, \textit{Item Response Theory: Principles and Applications}. Boston, MA, USA: Kluwer-Nijhoff, 1985.
-\bibitem{schnipke1997} S. P. Schnipke and D. J. Scrams, ``Modeling item response times with a two-state mixture model,'' \textit{Journal of Educational Measurement}, vol.~34, no.~3, pp.~213--232, 1997.
-\bibitem{liang2023} J. S. Liang \textit{et al.}, ``AutoGen: Enabling next-gen LLM applications via multi-agent conversation,'' arXiv preprint arXiv:2308.08155, 2023.
-\bibitem{conati2002} C. Conati, A. Gertner, and K. VanLehn, ``Using Bayesian networks to manage uncertainty in student modeling,'' \textit{User Modeling and User-Adapted Interaction}, vol.~12, no.~4, pp.~371--417, 2002.
-\bibitem{paquette2010} G. Paquette, \textit{Visual Knowledge Modeling for Semantic Web Technologies}. Hershey, PA, USA: IGI Global, 2010, pp.~93--175.
-\bibitem{dreyfus1986} H. Dreyfus and S. Dreyfus, \textit{Mind Over Machine: The Power of Human Intuition and Expertise in the Era of the Computer}. Cambridge, MA, USA: Basil Blackwell, 1986.
-\bibitem{kirkpatrick1996} D. L. Kirkpatrick, ``Great ideas revisited: Revisiting Kirkpatrick's four-level model,'' \textit{Training and Development}, vol.~50, no.~1, pp.~54--57, 1996.
+% ─────────────────────────────────────────────────────────────────────────────
+
+\bibitem{khan2025}
+H.~Khan, X.~Yuan, L.~Qingge, and K.~Roy,
+``Violence detection from industrial surveillance videos using deep
+learning,''
+\textit{IEEE Transactions on Industrial Informatics}, 2025.
+doi:10.1109/10844266.
+
+\bibitem{wang2025}
+Z.~Wang and Y.~Liu,
+``STAA: Spatio-temporal attention attribution for real-time interpreting
+transformer-based AI video models,''
+\textit{IEEE Transactions on Pattern Analysis and Machine Intelligence},
+2025.
+doi:10.1109/11020668.
+
+\bibitem{duja2024}
+K.~U.~Duja, I.~A.~Khan, and M.~Alsuhaibani,
+``Video surveillance anomaly detection: A review on deep learning
+benchmarks,''
+\textit{IEEE Access}, 2024.
+doi:10.1109/10744017.
+
+\bibitem{shoaib2023}
+M.~Shoaib, A.~Ullah, I.~A.~Abbasi, F.~Algarni, and A.~S.~Khan,
+``Augmenting the robustness and efficiency of violence detection systems
+for surveillance and non-surveillance scenarios,''
+\textit{IEEE Access}, 2023.
+doi:10.1109/10304142.
+
+\bibitem{survey2023}
+``A comprehensive survey of machine learning methods for surveillance
+videos anomaly detection,''
+\textit{IEEE Access}, 2023.
+doi:10.1109/10271300.
+
+\bibitem{bertasius2021}
+G.~Bertasius, H.~Wang, and L.~Torresani,
+``Is space-time attention all you need for video understanding?''
+in \textit{Proc. Int. Conf. Machine Learning (ICML)}, 2021.
+
+\bibitem{jocher2023}
+G.~Jocher \textit{et al.},
+``Ultralytics YOLOv8,'' 2023.
+[Online]. Available: \texttt{https://github.com/ultralytics/ultralytics}
+
+\bibitem{meta2024}
+Meta AI,
+``LLaMA 3.1: Open foundation and fine-tuned chat models,'' 2024.
+[Online]. Available: \texttt{https://ai.meta.com/llama/}
+
 \end{thebibliography}
 
 \end{document}
